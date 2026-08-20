@@ -1,0 +1,22 @@
+{
+  "name": "iiko-call-center",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @iiko-call-center/api & npm run dev -w @iiko-call-center/web",
+    "build": "npm run build -w @iiko-call-center/shared && npm run build -w @iiko-call-center/api && npm run build -w @iiko-call-center/web",
+    "test": "npm run test -w @iiko-call-center/api",
+    "lint": "npm run lint -w @iiko-call-center/api && npm run lint -w @iiko-call-center/web",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:studio": "prisma studio"
+  },
+  "devDependencies": {
+    "prisma": "^5.22.0",
+    "typescript": "^5.6.3"
+  }
+}
