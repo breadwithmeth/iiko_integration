@@ -111,4 +111,16 @@ describe("API routes", () => {
     expect(response.json().status).toBe("CREATED");
     expect(IikoHttpClient.prototype.post).toHaveBeenCalledTimes(1);
   });
+
+  it("POST /api/iiko/sync/menu returns 400 when organization missing", async () => {
+    // Simulate missing organization in DB
+    prismaMock.organization.findUnique.mockResolvedValue(null);
+    const app = await buildApp();
+    const token = app.jwt.sign({ sub: ids.userId, role: "ADMIN", jti: "jti", name: "Admin", email: "admin@example.com" });
+
+    const response = await app.inject({ method: "POST", url: "/api/iiko/sync/menu", headers: { authorization: `Bearer ${token}` } });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().message).toContain("Organization must be synchronized before menu");
+  });
 });

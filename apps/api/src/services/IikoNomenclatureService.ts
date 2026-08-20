@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { env } from "../lib/env.js";
+import { HttpError } from "../lib/HttpError.js";
 import type { IikoProduct, IikoProductGroup } from "../types/iiko.js";
 import { IikoHttpClient } from "./IikoHttpClient.js";
 
@@ -20,7 +21,7 @@ export class IikoNomenclatureService {
   async syncMenu(organizationIikoId = env.IIKO_ORGANIZATION_ID) {
     const organization = await prisma.organization.findUnique({ where: { iikoId: organizationIikoId } });
     if (!organization) {
-      throw new Error("Organization must be synchronized before menu");
+      throw new HttpError("Organization must be synchronized before menu", 400);
     }
 
     const limit = 100;
@@ -37,9 +38,11 @@ export class IikoNomenclatureService {
       );
       revision = data.revision === undefined ? revision : String(data.revision);
       const products = data.products ?? data.items ?? [];
-      const groups = data.productGroups ?? data.groups ?? [];
-
-      for (const group of groups) {
+const groups = data.productGroups ?? data.groups ?? [];
+// Build a set of group IDs that were present in this response,
+// so we can safely reference them when linking products.
+const groupIds = new Set<string>(groups.map((g) => g.id));
+for (const group of groups) {
         await prisma.productGroup.upsert({
           where: { groupId: group.id },
           update: {
@@ -70,7 +73,7 @@ export class IikoNomenclatureService {
             article: product.productArticle,
             code: product.code,
             description: product.description,
-            parentGroupId: product.parentGroupId,
+            parentGroupId: product.parentGroupId && groupIds.has(product.parentGroupId) ? product.parentGroupId : undefined,
             defaultSalePrice: new Prisma.Decimal(product.defaultSalePrice ?? 0),
             imageUrl,
             productSizeId: product.productSizeId,
@@ -90,7 +93,7 @@ export class IikoNomenclatureService {
             article: product.productArticle,
             code: product.code,
             description: product.description,
-            parentGroupId: product.parentGroupId,
+            parentGroupId: product.parentGroupId && groupIds.has(product.parentGroupId) ? product.parentGroupId : undefined,
             defaultSalePrice: new Prisma.Decimal(product.defaultSalePrice ?? 0),
             imageUrl,
             productSizeId: product.productSizeId,

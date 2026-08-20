@@ -5,6 +5,7 @@ import rateLimit from "@fastify/rate-limit";
 import Fastify from "fastify";
 import { ZodError } from "zod";
 import { env } from "./lib/env.js";
+import { HttpError } from "./lib/HttpError.js";
 import { prisma } from "./lib/prisma.js";
 import { authenticate } from "./middleware/auth.js";
 import { authRoutes } from "./modules/auth/routes.js";
@@ -33,22 +34,33 @@ export async function buildApp() {
   await app.register(jwt, { secret: env.JWT_SECRET });
   app.decorate("authenticate", authenticate);
 
-  app.setErrorHandler(async (error, _request, reply) => {
-    if (error instanceof ZodError) {
-      return reply.code(400).send({ message: "Validation error", issues: error.issues });
-    }
+app.setErrorHandler(async (error, _request, reply) => {
+  if (error instanceof ZodError) {
+    return reply.code(400).send({ message: "Validation error", issues: error.issues });
+  }
+  if (error instanceof HttpError) {
     app.log.error(error);
-    const message = error instanceof Error ? error.message : "Unknown error";
-    const name = error instanceof Error ? error.name : "UnknownError";
     await prisma.apiError.create({
       data: {
         source: "backend",
-        message,
-        detail: { name }
+        message: error.message,
+        detail: { name: error.name, status: error.status }
       }
     }).catch(() => undefined);
-    return reply.code(500).send({ message: "Internal server error" });
-  });
+    return reply.code(error.status).send({ message: error.message });
+  }
+  app.log.error(error);
+  const message = error instanceof Error ? error.message : "Unknown error";
+  const name = error instanceof Error ? error.name : "UnknownError";
+  await prisma.apiError.create({
+    data: {
+      source: "backend",
+      message,
+      detail: { name }
+    }
+  }).catch(() => undefined);
+  return reply.code(500).send({ message: "Internal server error" });
+});
 
   app.get("/health", async () => ({ ok: true }));
   await app.register(authRoutes);
