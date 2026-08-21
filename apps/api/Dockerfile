@@ -40,4 +40,4 @@ COPY --from=build /app/packages/shared/package.json ./packages/shared/package.js
 
 EXPOSE 4000
 
-CMD ["sh", "-c", "npx prisma migrate deploy && node apps/api/dist/server.js"]
+CMD ["sh", "-c", "npx prisma db push --skip-generate && node apps/api/dist/server.js"]
