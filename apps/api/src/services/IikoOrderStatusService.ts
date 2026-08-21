@@ -77,20 +77,22 @@ export class IikoOrderStatusService {
       return;
     }
 
-    // Map iiko status to our internal status
-    const status = this.mapIikoStatus(iikoOrder.status);
+    // Map iiko creationStatus to our internal status
+    // The /1/order/by_id endpoint returns creationStatus: "Success" | "InProgress" | "Error"
+    const creationStatus = iikoOrder.creationStatus as string | undefined;
+    const status = this.mapCreationStatus(creationStatus);
 
     await prisma.order.update({
       where: { id: orderId },
       data: {
         status,
-        iikoStatus: iikoOrder.status,
+        iikoStatus: iikoOrder.status ?? creationStatus,
         lastStatusCheckAt: new Date(),
         lastStatusResponse: response as unknown as Prisma.InputJsonValue
       }
     });
 
-    console.log(`Updated order ${orderId} status to ${status} (iiko: ${iikoOrder.status})`);
+    console.log(`Updated order ${orderId} status to ${status} (iiko creationStatus: ${creationStatus})`);
   }
 
   /**
@@ -150,23 +152,17 @@ export class IikoOrderStatusService {
   }
 
   /**
-   * Map iiko status to internal status
+   * Map iiko creationStatus to internal status
    */
-  private mapIikoStatus(iikoStatus: string | undefined): OrderStatus {
-    if (!iikoStatus) return OrderStatus.UNKNOWN;
+  private mapCreationStatus(creationStatus: string | undefined): OrderStatus {
+    if (!creationStatus) return OrderStatus.UNKNOWN;
 
     const statusMap: Record<string, OrderStatus> = {
-      "New": OrderStatus.CREATED,
-      "Accepted": OrderStatus.CREATED,
-      "Cooking": OrderStatus.CREATED,
-      "Waiting": OrderStatus.CREATED,
-      "Completed": OrderStatus.CREATED,
-      "Cancelled": OrderStatus.CANCELLED,
-      "Rejected": OrderStatus.FAILED,
-      "Delivered": OrderStatus.CREATED,
-      "Closed": OrderStatus.CREATED
+      "Success": OrderStatus.CREATED,
+      "InProgress": OrderStatus.SUBMITTING,
+      "Error": OrderStatus.FAILED
     };
 
-    return statusMap[iikoStatus] || OrderStatus.UNKNOWN;
+    return statusMap[creationStatus] || OrderStatus.UNKNOWN;
   }
 }

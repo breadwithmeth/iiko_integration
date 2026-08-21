@@ -132,6 +132,7 @@ export interface IikoOrderStatusResponse {
   orders?: Array<{
     id?: string;
     status?: string;
+    creationStatus?: string;
     externalNumber?: string;
     organizationId?: string;
     posId?: string;
