@@ -1,4 +1,5 @@
 FROM node:22-alpine AS deps
+RUN apk add --no-cache openssl libc6-compat
 WORKDIR /app
 COPY package.json package-lock.json* ./
 COPY apps/api/package.json apps/api/package.json
