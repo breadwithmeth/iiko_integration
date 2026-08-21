@@ -55,6 +55,7 @@ export interface IikoOrderItem {
   type: "Product";
   productId: string;
   amount: number;
+  price?: number;
   productSizeId?: string | null;
   comment?: string;
   modifiers?: Array<{ productId: string; amount: number; price?: number }>;
@@ -63,15 +64,27 @@ export interface IikoOrderItem {
 export interface IikoOrder {
   id: string;
   externalNumber: string;
-  customer: { name?: string; surname?: string; email?: string };
+  customer: {
+    name?: string;
+    surname?: string;
+    email?: string;
+    comment?: string;
+    shouldReceivePromoActionsInfo?: boolean;
+    shouldReceiveOrderStatusNotifications?: boolean;
+    gender?: string;
+    type?: string;
+  };
   phone: string;
   guestCount: number;
   guests: { count: number };
   items: IikoOrderItem[];
   payments: IikoPayment[];
-  sourceKey: string;
+  tabName?: string;
+  menuId?: string | null;
+  priceCategoryId?: string;
   orderTypeId: string;
-  externalData: Array<{ key: string; value: string; isPublic: boolean }>;
+  sourceKey?: string;
+  externalData?: Array<{ key: string; value: string; isPublic: boolean }>;
 }
 
 export interface IikoOrderCreateRequest {

@@ -1,4 +1,3 @@
-import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import jwt from "@fastify/jwt";
 import rateLimit from "@fastify/rate-limit";
@@ -29,7 +28,6 @@ export async function buildApp() {
   });
 
   await app.register(helmet);
-  await app.register(cors, { origin: env.WEB_ORIGIN, credentials: true });
   await app.register(rateLimit, { max: 600, timeWindow: "1 minute" });
   await app.register(jwt, { secret: env.JWT_SECRET });
   app.decorate("authenticate", authenticate);
@@ -63,6 +61,38 @@ app.setErrorHandler(async (error, _request, reply) => {
 });
 
   app.get("/health", async () => ({ ok: true }));
+  
+  // CORS helper
+  const getOrigin = (request: { headers: { origin?: string } }) => {
+    const requestOrigin = request.headers.origin;
+    const allowedOrigin = env.WEB_ORIGIN || "*";
+    // Cannot use "*" with credentials
+    if (requestOrigin && allowedOrigin !== "*") {
+      return requestOrigin;
+    }
+    return allowedOrigin;
+  };
+  
+  // Handle OPTIONS preflight
+  app.addHook("onRequest", async (request, reply) => {
+    if (request.method === "OPTIONS") {
+      const origin = getOrigin(request);
+      reply.header("Access-Control-Allow-Origin", origin);
+      reply.header("Access-Control-Allow-Credentials", "true");
+      reply.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS");
+      reply.header("Access-Control-Allow-Headers", "Origin, Content-Type, Authorization, Accept");
+      reply.header("Access-Control-Max-Age", "86400");
+      reply.code(204).send();
+    }
+  });
+  
+  // Add CORS headers to all responses
+  app.addHook("onSend", async (request, reply) => {
+    const origin = getOrigin(request);
+    reply.header("Access-Control-Allow-Origin", origin);
+    reply.header("Access-Control-Allow-Credentials", "true");
+  });
+  
   await app.register(authRoutes);
   await app.register(iikoRoutes);
   await app.register(productRoutes);

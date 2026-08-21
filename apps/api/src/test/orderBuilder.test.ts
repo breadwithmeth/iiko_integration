@@ -16,7 +16,15 @@ describe("IikoOrderBuilder", () => {
     });
 
     expect(payload.order.phone).toBe("+77771234567");
-    expect(payload.order.items[0]).toMatchObject({ type: "Product", productId, amount: 2, comment: "Без лука" });
+    expect(payload.order.items[0]).toMatchObject({ type: "Product", productId, price: 3900, amount: 2, comment: "Без лука" });
+    expect(payload.order.tabName).toBe("Заказ CALL-20260820-000001");
+    expect(payload.order.menuId).toBeNull();
+    expect(payload.order.customer.shouldReceivePromoActionsInfo).toBe(false);
+    expect(payload.order.customer.shouldReceiveOrderStatusNotifications).toBe(true);
+    expect(payload.order.customer.gender).toBe("NotSpecified");
+    expect(payload.order.customer.type).toBe("regular");
     expect(payload.createOrderSettings.checkStopList).toBe(true);
+    expect(payload.createOrderSettings.servicePrint).toBe(true);
+    expect(payload.createOrderSettings.transportToFrontTimeout).toBe(1);
   });
 });

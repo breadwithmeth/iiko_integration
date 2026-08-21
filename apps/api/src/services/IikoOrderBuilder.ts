@@ -8,6 +8,7 @@ interface BuildInput {
   organizationId: string;
   terminalGroupId: string;
   orderTypeId: string;
+  priceCategoryId?: string;
   customer: CustomerInput;
   items: CartItem[];
   payment: {
@@ -28,14 +29,23 @@ export class IikoOrderBuilder {
         customer: {
           name: input.customer.firstName,
           surname: input.customer.lastName,
-          email: input.customer.email
+          email: input.customer.email,
+          comment: input.customer.comment,
+          shouldReceivePromoActionsInfo: false,
+          shouldReceiveOrderStatusNotifications: true,
+          gender: "NotSpecified",
+          type: "regular"
         },
         phone: normalizePhone(input.customer.phone),
         guestCount: 1,
         guests: { count: 1 },
+        tabName: `Заказ ${input.externalNumber}`,
+        menuId: null,
+        priceCategoryId: input.priceCategoryId,
         items: input.items.map((item) => ({
           type: "Product",
           productId: item.productId,
+          price: item.price,
           amount: item.amount,
           productSizeId: item.productSizeId ?? undefined,
           comment: item.comment?.trim() || undefined,
@@ -55,13 +65,11 @@ export class IikoOrderBuilder {
             isPrepay: false
           }
         ],
-        sourceKey: "CALL_CENTER",
-        orderTypeId: input.orderTypeId,
-        externalData: [{ key: "source", value: "call-center", isPublic: false }]
+        orderTypeId: input.orderTypeId
       },
       createOrderSettings: {
-        servicePrint: false,
-        transportToFrontTimeout: 10,
+        servicePrint: true,
+        transportToFrontTimeout: 1,
         checkStopList: true
       }
     };

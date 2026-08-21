@@ -32,6 +32,7 @@ const createOrderSchema = z.object({
   organizationId: z.string().min(1),
   terminalGroupId: z.string().min(1),
   orderTypeId: z.string().min(1),
+  priceCategoryId: z.string().min(1).optional(),
   paymentTypeId: z.string().min(1),
   paymentTypeKind: z.string().min(1),
   customer: z.object({
@@ -104,6 +105,7 @@ if (products.some(p => !isDishWithPositivePrice(p))) {
       organizationId: input.organizationId,
       terminalGroupId: input.terminalGroupId,
       orderTypeId: input.orderTypeId,
+      priceCategoryId: input.priceCategoryId,
       customer: { ...input.customer, phone },
       items: input.items,
       payment: { paymentTypeId: input.paymentTypeId, paymentTypeKind: input.paymentTypeKind, sum: total }
