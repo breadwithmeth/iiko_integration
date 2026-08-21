@@ -9,7 +9,7 @@ import { IikoHttpClient, IikoHttpError } from "../../services/IikoHttpClient.js"
 import { IikoOrderBuilder } from "../../services/IikoOrderBuilder.js";
 import { IikoOrderStatusService } from "../../services/IikoOrderStatusService.js";
 import { isDishWithPositivePrice } from "../../services/productValidator.js";
-import type { IikoOrderCreateResponse } from "../../types/iiko.js";
+import type { IikoOrderCreateResponse, IikoOrderCancelResponse } from "../../types/iiko.js";
 
 const modifierSchema = z.object({
   productId: z.string().uuid(),
@@ -237,6 +237,80 @@ if (products.some(p => !isDishWithPositivePrice(p))) {
       return reply.code(404).send({ message: "Order not found" });
     }
     return serializeOrder(order);
+  });
+
+  app.post("/api/orders/:id/cancel", { preHandler: [app.authenticate] }, async (request, reply) => {
+    const params = z.object({ id: z.string().uuid() }).parse(request.params);
+    const order = await prisma.order.findUnique({
+      where: { id: params.id },
+      include: { organization: true }
+    });
+
+    if (!order || (request.user.role === "OPERATOR" && order.operatorId !== request.user.sub)) {
+      return reply.code(404).send({ message: "Order not found" });
+    }
+
+    // Check if order can be cancelled
+    if (!order.iikoOrderId) {
+      return reply.code(400).send({ message: "Order has no iiko order ID, cannot cancel" });
+    }
+
+    // Check if order is already cancelled or in a non-cancellable state
+    if (order.status === "CANCELLED") {
+      return reply.code(400).send({ message: "Order is already cancelled" });
+    }
+
+    if (order.status === "FAILED" || order.status === "UNKNOWN") {
+      return reply.code(400).send({ message: `Cannot cancel order with status: ${order.status}` });
+    }
+
+    const auth = new IikoAuthService();
+    const statusService = new IikoOrderStatusService(auth);
+
+    try {
+      const cancelResponse = await statusService.cancelOrder(order.iikoOrderId, order.organization.iikoId);
+
+      if (!cancelResponse) {
+        return reply.code(500).send({ message: "Failed to cancel order: no response from iiko" });
+      }
+
+      // Check if cancellation was successful
+      const cancelStatus = cancelResponse.orderInfo?.cancelStatus;
+      const errorInfo = cancelResponse.orderInfo?.errorInfo;
+
+      if (cancelStatus === "Success" || cancelStatus === "Cancelled") {
+        // Update order status to CANCELLED
+        const updated = await prisma.order.update({
+          where: { id: order.id },
+          data: {
+            status: "CANCELLED",
+            iikoStatus: cancelStatus,
+            errorMessage: undefined,
+            lastStatusCheckAt: new Date(),
+            lastStatusResponse: cancelResponse as unknown as Prisma.InputJsonValue
+          },
+          include: orderInclude
+        });
+        await prisma.auditLog.create({ data: { userId: request.user.sub, event: "order.cancel", entity: "Order", entityId: order.id } });
+        return serializeOrder(updated);
+      } else {
+        // Cancellation failed
+        const errorMessage = errorInfo?.message ?? errorInfo?.description ?? `iiko cancellation status: ${cancelStatus}`;
+        const updated = await prisma.order.update({
+          where: { id: order.id },
+          data: {
+            errorMessage,
+            lastStatusCheckAt: new Date(),
+            lastStatusResponse: cancelResponse as unknown as Prisma.InputJsonValue
+          },
+          include: orderInclude
+        });
+        return reply.code(400).send({ message: errorMessage, order: serializeOrder(updated) });
+      }
+    } catch (error) {
+      console.error(`Failed to cancel order ${order.id}:`, error);
+      return reply.code(500).send({ message: "Internal server error while cancelling order" });
+    }
   });
 }
 

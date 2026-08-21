@@ -146,3 +146,23 @@ export interface IikoOrderStatusResponse {
     [key: string]: unknown;
   }>;
 }
+
+export interface IikoOrderCancelRequest {
+  organizationId: string;
+  orderId: string;
+}
+
+export interface IikoOrderCancelResponse {
+  correlationId: string;
+  orderInfo?: {
+    id?: string;
+    externalNumber?: string;
+    organizationId?: string;
+    cancelStatus?: string;
+    errorInfo?: {
+      code?: string;
+      message?: string;
+      description?: string;
+    };
+  };
+}

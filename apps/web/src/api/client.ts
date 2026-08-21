@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4005";
+const API_URL = import.meta.env.VITE_API_URL ?? "https://iiko_back.gradusy24.kz";
 
 export class ApiError extends Error {
   constructor(

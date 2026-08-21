@@ -2,7 +2,7 @@ import { prisma } from "../lib/prisma.js";
 import { OrderStatus, Prisma } from "@prisma/client";
 import { IikoHttpClient } from "./IikoHttpClient.js";
 import { IikoAuthService } from "./IikoAuthService.js";
-import type { IikoOrderStatusRequest, IikoOrderStatusResponse } from "../types/iiko.js";
+import type { IikoOrderStatusRequest, IikoOrderStatusResponse, IikoOrderCancelRequest, IikoOrderCancelResponse } from "../types/iiko.js";
 import { env } from "../lib/env.js";
 
 export class IikoOrderStatusService {
@@ -30,6 +30,28 @@ export class IikoOrderStatusService {
     } catch (error) {
       // Log error but don't throw - we'll handle it in the caller
       console.error(`Failed to check status for order ${orderId}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Cancel an order via iiko API
+   */
+  async cancelOrder(orderId: string, organizationId: string): Promise<IikoOrderCancelResponse | null> {
+    const request: IikoOrderCancelRequest = {
+      organizationId,
+      orderId
+    };
+
+    try {
+      return await this.client.post<IikoOrderCancelResponse>(
+        "/1/order/cancel",
+        request as unknown as Record<string, unknown>,
+        "iiko.order.cancel"
+      );
+    } catch (error) {
+      // Log error but don't throw - we'll handle it in the caller
+      console.error(`Failed to cancel order ${orderId}:`, error);
       return null;
     }
   }
