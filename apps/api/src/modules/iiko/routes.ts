@@ -41,10 +41,21 @@ export async function iikoRoutes(app: FastifyInstance) {
       ? await prisma.orderType.findMany({ where: { organizationId: organization.id, isDeleted: false }, orderBy: { name: "asc" } })
       : [];
     if (cached.length) return cached;
-    return directories.syncOrderTypes(organizationIikoId);
-  });
+return directories.syncOrderTypes(organizationIikoId);
+          });
 
-  app.get("/api/iiko/payment-types", { preHandler: [app.authenticate] }, async (request) => {
+          // New endpoint: fetch raw order types from iiko (no DB persistence)
+          app.post("/api/iiko/order-types/raw", { preHandler: [app.authenticate] }, async (request) => {
+            const bodySchema = z.object({ organizationIds: z.array(z.string()).min(1) });
+            const { organizationIds } = bodySchema.parse(request.body as any);
+            // Use the existing directory service to fetch raw data
+            const raw = await directories.fetchOrderTypesRaw(organizationIds);
+            return raw;
+          });
+
+          app.get("/api/iiko/payment-types", { preHandler: [app.authenticate] }, async (request) => {
+  // Existing handler for payment types
+
     const query = querySchema.parse(request.query);
     const organizationIikoId = query.organizationId ?? env.IIKO_ORGANIZATION_ID;
     const organization = await prisma.organization.findUnique({ where: { iikoId: organizationIikoId } });

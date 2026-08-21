@@ -1,8 +1,9 @@
 import { KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCcw, Search } from "lucide-react";
 import type { ProductDto } from "@iiko-call-center/shared";
+import { isValidDish } from "../utils/product";
 import { ApiError, formatMoney } from "../api/client";
-import { useCreateOrder, useOrderTypes, useOrganizations, usePaymentTypes, useProducts, useSyncMenu, useTerminalGroups } from "../api/hooks";
+import { useCreateOrder, useOrderTypes, useOrganizations, usePaymentTypes, useProducts, useSyncMenu, useTerminalGroups, useSyncDirectories } from "../api/hooks";
 import { CartPanel } from "../components/CartPanel";
 import { useCartStore } from "../stores/cartStore";
 
@@ -25,6 +26,7 @@ export function NewOrderPage() {
   const paymentTypes = usePaymentTypes(organizationId);
   const products = useProducts(debouncedQuery, category);
   const syncMenu = useSyncMenu();
+  const syncDirectories = useSyncDirectories();
   const createOrder = useCreateOrder();
   const add = useCartStore((state) => state.add);
   const clear = useCartStore((state) => state.clear);
@@ -60,7 +62,7 @@ export function NewOrderPage() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  const productItems = products.data?.items ?? [];
+  const productItems = (products.data?.items ?? []).filter(isValidDish);
   const paymentType = paymentTypes.data?.find((item) => item.iikoId === paymentTypeId);
   const canSubmit = Boolean(organizationId && terminalGroupId && orderTypeId && paymentTypeId && customer.phone && items.length && !createOrder.isPending);
 
@@ -142,6 +144,7 @@ export function NewOrderPage() {
             {paymentTypes.data?.map((item) => <option key={item.iikoId} value={item.iikoId}>{item.name}</option>)}
           </select>
           <button className="secondary-button" onClick={() => syncMenu.mutate()} disabled={syncMenu.isPending} title="Обновить меню"><RefreshCcw size={17} /> Обновить меню</button>
+              <button className="secondary-button" onClick={() => syncDirectories.mutate()} disabled={syncDirectories.isPending} title="Синхронизировать справочники"><RefreshCcw size={17} /> Синхронизация</button>
         </div>
 
         <div className="customer-grid">

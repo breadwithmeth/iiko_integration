@@ -7,6 +7,7 @@ import { prisma } from "../../lib/prisma.js";
 import { IikoAuthService } from "../../services/IikoAuthService.js";
 import { IikoHttpClient, IikoHttpError } from "../../services/IikoHttpClient.js";
 import { IikoOrderBuilder } from "../../services/IikoOrderBuilder.js";
+import { isDishWithPositivePrice } from "../../services/productValidator.js";
 import type { IikoOrderCreateResponse } from "../../types/iiko.js";
 
 const modifierSchema = z.object({
@@ -28,10 +29,10 @@ const itemSchema = z.object({
 
 const createOrderSchema = z.object({
   idempotencyKey: z.string().uuid().optional(),
-  organizationId: z.string().uuid(),
-  terminalGroupId: z.string().uuid(),
-  orderTypeId: z.string().uuid(),
-  paymentTypeId: z.string().uuid(),
+  organizationId: z.string().min(1),
+  terminalGroupId: z.string().min(1),
+  orderTypeId: z.string().min(1),
+  paymentTypeId: z.string().min(1),
   paymentTypeKind: z.string().min(1),
   customer: z.object({
     phone: z.string().min(3),
@@ -83,8 +84,15 @@ export async function orderRoutes(app: FastifyInstance) {
 
     const products = await prisma.product.findMany({ where: { productId: { in: input.items.map((item) => item.productId) }, deleted: false } });
     if (products.length !== new Set(input.items.map((item) => item.productId)).size) {
-      return reply.code(400).send({ message: "One or more products are unavailable" });
-    }
+  return reply.code(400).send({ message: "One or more products are unavailable" });
+}
+
+// Ensure all ordered products are DISH with a positive price
+if (products.some(p => !isDishWithPositivePrice(p))) {
+  return reply
+    .code(400)
+    .send({ message: "One or more ordered products are not DISH or have zero price" });
+}
 
     const phone = normalizePhone(input.customer.phone);
     const total = calculateTotal(input.items);

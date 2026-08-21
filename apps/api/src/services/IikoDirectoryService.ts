@@ -7,6 +7,15 @@ import { Prisma } from "@prisma/client";
 type JsonRecord = Record<string, unknown>;
 
 export class IikoDirectoryService {
+  /**
+   * Fetch raw order types from iiko without persisting them.
+   * Returns the full response as received from iiko, which includes a correlationId
+   * and the list of order types with their items.
+   */
+  async fetchOrderTypesRaw(organizationIds: string[]) {
+    // No specific typing – we return the raw response structure.
+    return this.client.post<any>("/1/deliveries/order_types", { organizationIds }, "iiko.order_types");
+  }
   constructor(private readonly client: IikoHttpClient) {}
 
   async syncOrganizations() {
@@ -76,10 +85,12 @@ export class IikoDirectoryService {
     return prisma.terminalGroup.findMany({ where: { organizationId: organization.id }, orderBy: { name: "asc" } });
   }
 
-  async syncOrderTypes(organizationIikoId = env.IIKO_ORGANIZATION_ID) {
+async syncOrderTypes(organizationIikoId = env.IIKO_ORGANIZATION_ID) {
     const organization = await this.requireOrganization(organizationIikoId);
     const data = await this.client.post<{ orderTypes?: JsonRecord[] }>("/1/deliveries/order_types", { organizationIds: [organization.iikoId] }, "iiko.order_types");
-    for (const item of data.orderTypes ?? []) {
+    // iiko returns a structure where each entry may contain an "items" array of order type objects.
+    const types = data.orderTypes?.flatMap(entry => (entry as any).items ?? []) ?? [];
+    for (const item of types) {
       await prisma.orderType.upsert({
         where: { iikoId: String(item.id) },
         update: {
@@ -87,7 +98,7 @@ export class IikoDirectoryService {
           name: String(item.name ?? "Без названия"),
           orderServiceType: typeof item.orderServiceType === "string" ? item.orderServiceType : undefined,
           isDeleted: Boolean(item.isDeleted ?? false),
-          rawData: item as Prisma.InputJsonObject
+          rawData: item as Prisma.InputJsonObject,
         },
         create: {
           iikoId: String(item.id),
@@ -95,8 +106,8 @@ export class IikoDirectoryService {
           name: String(item.name ?? "Без названия"),
           orderServiceType: typeof item.orderServiceType === "string" ? item.orderServiceType : undefined,
           isDeleted: Boolean(item.isDeleted ?? false),
-          rawData: item as Prisma.InputJsonObject
-        }
+          rawData: item as Prisma.InputJsonObject,
+        },
       });
     }
     return prisma.orderType.findMany({ where: { organizationId: organization.id, isDeleted: false }, orderBy: { name: "asc" } });
