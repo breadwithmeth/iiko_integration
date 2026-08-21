@@ -121,3 +121,28 @@ export interface IikoErrorResponse {
   message?: string;
   [key: string]: unknown;
 }
+
+export interface IikoOrderStatusRequest {
+  organizationIds: string[];
+  orderIds: string[];
+}
+
+export interface IikoOrderStatusResponse {
+  correlationId: string;
+  orders?: Array<{
+    id?: string;
+    status?: string;
+    externalNumber?: string;
+    organizationId?: string;
+    posId?: string;
+    creationDate?: string;
+    closeDate?: string;
+    sum?: number;
+    errorInfo?: {
+      code?: string;
+      message?: string;
+      description?: string;
+    };
+    [key: string]: unknown;
+  }>;
+}

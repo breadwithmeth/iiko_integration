@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { Prisma, OrderStatus } from "@prisma/client";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { calculateTotal } from "../../lib/money.js";
@@ -7,6 +7,7 @@ import { prisma } from "../../lib/prisma.js";
 import { IikoAuthService } from "../../services/IikoAuthService.js";
 import { IikoHttpClient, IikoHttpError } from "../../services/IikoHttpClient.js";
 import { IikoOrderBuilder } from "../../services/IikoOrderBuilder.js";
+import { IikoOrderStatusService } from "../../services/IikoOrderStatusService.js";
 import { isDishWithPositivePrice } from "../../services/productValidator.js";
 import type { IikoOrderCreateResponse } from "../../types/iiko.js";
 
@@ -55,8 +56,22 @@ const listQuerySchema = z.object({
 });
 
 export async function orderRoutes(app: FastifyInstance) {
-  const client = new IikoHttpClient(new IikoAuthService());
+  const auth = new IikoAuthService();
+  const client = new IikoHttpClient(auth);
   const builder = new IikoOrderBuilder();
+  const statusService = new IikoOrderStatusService(auth);
+
+  const mapCreationStatus = (status: string | undefined): OrderStatus => {
+    switch (status) {
+      case "Success":
+        return OrderStatus.CREATED;
+      case "InProgress":
+        return OrderStatus.SUBMITTING;
+      case "Error":
+      default:
+        return OrderStatus.FAILED;
+    }
+  };
 
   app.post("/api/orders", { preHandler: [app.authenticate] }, async (request, reply) => {
     const input = createOrderSchema.parse(request.body);
@@ -148,7 +163,8 @@ if (products.some(p => !isDishWithPositivePrice(p))) {
 
     try {
       const response = await client.post<IikoOrderCreateResponse>("/1/order/create", payload as unknown as Record<string, unknown>, "iiko.order.create");
-      const status = response.orderInfo?.creationStatus === "Success" ? "CREATED" : "FAILED";
+      const creationStatus = response.orderInfo?.creationStatus;
+      const status = mapCreationStatus(creationStatus);
       const updated = await prisma.order.update({
         where: { id: order.id },
         data: {
@@ -162,6 +178,14 @@ if (products.some(p => !isDishWithPositivePrice(p))) {
         include: orderInclude
       });
       await prisma.auditLog.create({ data: { userId: request.user.sub, event: "order.create", entity: "Order", entityId: order.id } });
+      
+      // Check order status immediately after creation
+      if (updated.iikoOrderId && updated.organizationId) {
+        // Run in background - don't wait for it to complete
+        statusService.updateOrderStatus(updated.id, updated.iikoOrderId, updated.organization.iikoId)
+          .catch(err => console.error(`Background status check failed for order ${updated.id}:`, err));
+      }
+      
       return serializeOrder(updated);
     } catch (error) {
       const isNetworkOrTimeout = !(error instanceof IikoHttpError) || !error.status;

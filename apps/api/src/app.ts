@@ -12,6 +12,8 @@ import { iikoRoutes } from "./modules/iiko/routes.js";
 import { orderRoutes } from "./modules/orders/routes.js";
 import { productRoutes } from "./modules/products/routes.js";
 import { userRoutes } from "./modules/users/routes.js";
+import { IikoAuthService } from "./services/IikoAuthService.js";
+import { IikoOrderStatusService } from "./services/IikoOrderStatusService.js";
 
 declare module "fastify" {
   interface FastifyInstance {
@@ -31,6 +33,17 @@ export async function buildApp() {
   await app.register(rateLimit, { max: 600, timeWindow: "1 minute" });
   await app.register(jwt, { secret: env.JWT_SECRET });
   app.decorate("authenticate", authenticate);
+
+  // Initialize order status check service and start scheduled job
+  const authService = new IikoAuthService();
+  const orderStatusService = new IikoOrderStatusService(authService);
+  
+  // Start scheduled order status checking (every 5 minutes by default)
+  const checkInterval = parseInt(String(env.ORDER_STATUS_CHECK_INTERVAL_MINUTES), 10) || 5;
+  orderStatusService.startScheduledCheck(checkInterval);
+  
+  // Store service on app for potential cleanup
+  app.decorate("orderStatusService", orderStatusService);
 
 app.setErrorHandler(async (error, _request, reply) => {
   if (error instanceof ZodError) {
