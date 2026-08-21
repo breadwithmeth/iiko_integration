@@ -1,11 +1,22 @@
 import { useParams } from "react-router-dom";
 import { formatMoney } from "../api/client";
-import { useOrder } from "../api/hooks";
+import { useOrder, useCancelOrder } from "../api/hooks";
 
 export function OrderDetailsPage() {
   const { id } = useParams();
   const order = useOrder(id);
+  const cancelOrder = useCancelOrder();
   const data = order.data;
+
+  const canCancel = data?.status === "SUBMITTING" || data?.status === "CREATED";
+
+  const handleCancel = async () => {
+    if (!id) return;
+    const confirmed = window.confirm("Вы уверены, что хотите отменить этот заказ?");
+    if (!confirmed) return;
+    await cancelOrder.mutateAsync(id);
+    // The query invalidation will refresh the data
+  };
 
   if (order.isLoading) return <div className="page-panel">Загрузка...</div>;
   if (!data) return <div className="page-panel">Заказ не найден</div>;
@@ -42,6 +53,15 @@ export function OrderDetailsPage() {
         </tbody>
       </table>
       <div className="detail-total">Итого: {formatMoney(data.total)}</div>
+      {canCancel && (
+        <button
+          className="danger-button"
+          onClick={handleCancel}
+          disabled={cancelOrder.isPending}
+        >
+          {cancelOrder.isPending ? "Отмена..." : "Отменить заказ"}
+        </button>
+      )}
     </section>
   );
 }

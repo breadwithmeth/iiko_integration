@@ -345,6 +345,16 @@ small {
   white-space: nowrap;
 }
 
+.danger-button {
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  background: #b84040;
+  color: #ffffff;
+  font-weight: 800;
+  min-height: 38px;
+}
+
 .icon-button {
   width: 34px;
   height: 34px;

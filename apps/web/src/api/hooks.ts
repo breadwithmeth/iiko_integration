@@ -95,6 +95,17 @@ export function useOrder(id?: string) {
   return useQuery({ queryKey: ["orders", id], queryFn: () => api<OrderDto>(`/api/orders/${id}`), enabled: Boolean(id) });
 }
 
+export function useCancelOrder() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (orderId: string) => api<{ message?: string; order?: OrderDto }>(`/api/orders/${orderId}/cancel`, { method: "POST" }),
+    onSuccess: (_, orderId) => {
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["orders", orderId] });
+    }
+  });
+}
+
 export interface OrderDto {
   id: string;
   externalNumber: string;

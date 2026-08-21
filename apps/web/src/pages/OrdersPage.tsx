@@ -1,12 +1,13 @@
 import { FormEvent, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { formatMoney } from "../api/client";
-import { useOrders } from "../api/hooks";
+import { useOrders, useCancelOrder } from "../api/hooks";
 
 export function OrdersPage() {
   const [filters, setFilters] = useState({ date: "", phone: "", externalNumber: "", status: "" });
   const [applied, setApplied] = useState(new URLSearchParams());
   const orders = useOrders(applied);
+  const cancelOrder = useCancelOrder();
 
   function apply(event: FormEvent) {
     event.preventDefault();
@@ -16,6 +17,14 @@ export function OrdersPage() {
   }
 
   const items = useMemo(() => orders.data?.items ?? [], [orders.data]);
+
+  const canCancel = (status: string) => status === "SUBMITTING" || status === "CREATED";
+
+  const handleCancel = async (orderId: string) => {
+    const confirmed = window.confirm("Вы уверены, что хотите отменить этот заказ?");
+    if (!confirmed) return;
+    await cancelOrder.mutateAsync(orderId);
+  };
 
   return (
     <section className="page-panel">
@@ -32,7 +41,7 @@ export function OrdersPage() {
       </form>
       <table className="data-table">
         <thead>
-          <tr><th>Дата</th><th>№ заказа</th><th>Клиент</th><th>Телефон</th><th>Сумма</th><th>Статус</th><th>iiko ID</th></tr>
+          <tr><th>Дата</th><th>№ заказа</th><th>Клиент</th><th>Телефон</th><th>Сумма</th><th>Статус</th><th>iiko ID</th><th></th></tr>
         </thead>
         <tbody>
           {items.map((order) => (
@@ -44,6 +53,17 @@ export function OrdersPage() {
               <td>{formatMoney(order.total)}</td>
               <td><span className={`status ${order.status.toLowerCase()}`}>{order.status}</span></td>
               <td>{order.iikoOrderId ?? "—"}</td>
+              <td>
+                {canCancel(order.status) && (
+                  <button
+                    className="danger-button"
+                    onClick={() => handleCancel(order.id)}
+                    disabled={cancelOrder.isPending}
+                  >
+                    {cancelOrder.isPending ? "Отмена..." : "Отменить"}
+                  </button>
+                )}
+              </td>
             </tr>
           ))}
         </tbody>
