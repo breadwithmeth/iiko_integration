@@ -167,3 +167,51 @@ export interface IikoOrderCancelResponse {
     };
   };
 }
+
+export interface IikoPrintBillRequest {
+  organizationId: string;
+  orderId: string;
+  chequeAdditionalInfo: {
+    needReceipt: boolean;
+    isInternetPayment: boolean;
+  };
+}
+
+export interface IikoPrintBillResponse {
+  correlationId: string;
+  orderInfo?: {
+    id?: string;
+    externalNumber?: string;
+    organizationId?: string;
+    printStatus?: string;
+    errorInfo?: {
+      code?: string;
+      message?: string;
+      description?: string;
+    };
+  };
+}
+
+export interface IikoCloseOrderRequest {
+  organizationId: string;
+  orderId: string;
+  chequeAdditionalInfo: {
+    needReceipt: boolean;
+    isInternetPayment: boolean;
+  };
+}
+
+export interface IikoCloseOrderResponse {
+  correlationId: string;
+  orderInfo?: {
+    id?: string;
+    externalNumber?: string;
+    organizationId?: string;
+    closeStatus?: string;
+    errorInfo?: {
+      code?: string;
+      message?: string;
+      description?: string;
+    };
+  };
+}

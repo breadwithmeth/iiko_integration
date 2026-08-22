@@ -2,7 +2,7 @@ import { prisma } from "../lib/prisma.js";
 import { OrderStatus, Prisma } from "@prisma/client";
 import { IikoHttpClient } from "./IikoHttpClient.js";
 import { IikoAuthService } from "./IikoAuthService.js";
-import type { IikoOrderStatusRequest, IikoOrderStatusResponse, IikoOrderCancelRequest, IikoOrderCancelResponse } from "../types/iiko.js";
+import type { IikoOrderStatusRequest, IikoOrderStatusResponse, IikoOrderCancelRequest, IikoOrderCancelResponse, IikoPrintBillRequest, IikoPrintBillResponse, IikoCloseOrderRequest, IikoCloseOrderResponse } from "../types/iiko.js";
 import { env } from "../lib/env.js";
 
 export class IikoOrderStatusService {
@@ -52,6 +52,58 @@ export class IikoOrderStatusService {
     } catch (error) {
       // Log error but don't throw - we'll handle it in the caller
       console.error(`Failed to cancel order ${orderId}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Print bill/receipt for an order via iiko API
+   */
+  async printBill(orderId: string, organizationId: string): Promise<IikoPrintBillResponse | null> {
+    const request: IikoPrintBillRequest = {
+      organizationId,
+      orderId,
+      chequeAdditionalInfo: {
+        needReceipt: true,
+        isInternetPayment: true
+      }
+    };
+
+    try {
+      return await this.client.post<IikoPrintBillResponse>(
+        "/1/order/print_bill",
+        request as unknown as Record<string, unknown>,
+        "iiko.order.print_bill"
+      );
+    } catch (error) {
+      // Log error but don't throw - we'll handle it in the caller
+      console.error(`Failed to print bill for order ${orderId}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Close an order via iiko API
+   */
+  async closeOrder(orderId: string, organizationId: string): Promise<IikoCloseOrderResponse | null> {
+    const request: IikoCloseOrderRequest = {
+      organizationId,
+      orderId,
+      chequeAdditionalInfo: {
+        needReceipt: true,
+        isInternetPayment: true
+      }
+    };
+
+    try {
+      return await this.client.post<IikoCloseOrderResponse>(
+        "/1/order/close",
+        request as unknown as Record<string, unknown>,
+        "iiko.order.close"
+      );
+    } catch (error) {
+      // Log error but don't throw - we'll handle it in the caller
+      console.error(`Failed to close order ${orderId}:`, error);
       return null;
     }
   }
