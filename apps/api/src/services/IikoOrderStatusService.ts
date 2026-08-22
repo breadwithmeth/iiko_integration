@@ -21,15 +21,20 @@ export class IikoOrderStatusService {
       orderIds: [orderId]
     };
 
+    console.log(`[CHECK_STATUS] Checking status for order ${orderId} in org ${organizationId}`);
+
     try {
-      return await this.client.post<IikoOrderStatusResponse>(
+      const response = await this.client.post<IikoOrderStatusResponse>(
         "/1/order/by_id",
         request as unknown as Record<string, unknown>,
         "iiko.order.status.check"
       );
+      
+      console.log(`[CHECK_STATUS] Response for order ${orderId}:`, JSON.stringify(response));
+      return response;
     } catch (error) {
       // Log error but don't throw - we'll handle it in the caller
-      console.error(`Failed to check status for order ${orderId}:`, error);
+      console.error(`[CHECK_STATUS] Failed for order ${orderId}:`, error);
       return null;
     }
   }
@@ -69,15 +74,20 @@ export class IikoOrderStatusService {
       }
     };
 
+    console.log(`[PRINT_BILL] Sending request for order ${orderId}:`, JSON.stringify(request));
+
     try {
-      return await this.client.post<IikoPrintBillResponse>(
+      const response = await this.client.post<IikoPrintBillResponse>(
         "/1/order/print_bill",
         request as unknown as Record<string, unknown>,
         "iiko.order.print_bill"
       );
+      
+      console.log(`[PRINT_BILL] Response for order ${orderId}:`, JSON.stringify(response));
+      return response;
     } catch (error) {
       // Log error but don't throw - we'll handle it in the caller
-      console.error(`Failed to print bill for order ${orderId}:`, error);
+      console.error(`[PRINT_BILL] Failed for order ${orderId}:`, error);
       return null;
     }
   }
@@ -95,15 +105,20 @@ export class IikoOrderStatusService {
       }
     };
 
+    console.log(`[CLOSE_ORDER] Sending request for order ${orderId}:`, JSON.stringify(request));
+
     try {
-      return await this.client.post<IikoCloseOrderResponse>(
+      const response = await this.client.post<IikoCloseOrderResponse>(
         "/1/order/close",
         request as unknown as Record<string, unknown>,
         "iiko.order.close"
       );
+      
+      console.log(`[CLOSE_ORDER] Response for order ${orderId}:`, JSON.stringify(response));
+      return response;
     } catch (error) {
       // Log error but don't throw - we'll handle it in the caller
-      console.error(`Failed to close order ${orderId}:`, error);
+      console.error(`[CLOSE_ORDER] Failed for order ${orderId}:`, error);
       return null;
     }
   }
@@ -134,6 +149,11 @@ export class IikoOrderStatusService {
     const creationStatus = iikoOrder.creationStatus as string | undefined;
     const status = this.mapCreationStatus(creationStatus);
 
+    // Check if status changed to CREATED (was not CREATED before)
+    const wasCreated = order.status === "CREATED";
+    const isNowCreated = status === "CREATED";
+    const shouldTriggerPrintBill = isNowCreated && !wasCreated;
+
     await prisma.order.update({
       where: { id: orderId },
       data: {
@@ -145,6 +165,41 @@ export class IikoOrderStatusService {
     });
 
     console.log(`Updated order ${orderId} status to ${status} (iiko creationStatus: ${creationStatus})`);
+
+    // Trigger print bill when order becomes CREATED
+    if (shouldTriggerPrintBill && order.organizationId) {
+      // Get organization iikoId
+      const organization = await prisma.organization.findUnique({
+        where: { id: order.organizationId },
+        select: { iikoId: true }
+      });
+      
+      if (organization?.iikoId) {
+        console.log(`Order ${orderId} became CREATED, triggering print bill...`);
+        this.printBill(iikoOrderId, organization.iikoId)
+          .then(printResponse => {
+            if (printResponse) {
+              console.log(`Print bill response for order ${iikoOrderId}:`, printResponse);
+              
+              // After successful print, wait 10 seconds then close order
+              setTimeout(() => {
+                this.closeOrder(iikoOrderId, organization.iikoId)
+                  .then(closeResponse => {
+                    if (closeResponse) {
+                      console.log(`Close order response for order ${iikoOrderId}:`, closeResponse);
+                    } else {
+                      console.log(`Close order returned no response for order ${iikoOrderId}`);
+                    }
+                  })
+                  .catch(err => console.error(`Close order failed for order ${iikoOrderId}:`, err));
+              }, 10000); // 10 seconds delay
+            } else {
+              console.log(`Print bill returned no response for order ${iikoOrderId}`);
+            }
+          })
+          .catch(err => console.error(`Print bill failed for order ${iikoOrderId}:`, err));
+      }
+    }
   }
 
   /**
@@ -165,7 +220,10 @@ export class IikoOrderStatusService {
       }
     });
 
-    console.log(`Found ${pendingOrders?.length || 0} orders to check`);
+    console.log(`[CHECK_PENDING] Found ${pendingOrders?.length || 0} orders to check`);
+    if (pendingOrders?.length) {
+      pendingOrders.forEach(o => console.log(`[CHECK_PENDING] - Order ${o.id} (iiko: ${o.iikoOrderId}, status: ${o.status}, org: ${o.organization?.iikoId})`));
+    }
 
     if (!pendingOrders) return;
 
