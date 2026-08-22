@@ -49,7 +49,7 @@ export class IikoOrderBuilder {
           price: item.price,
           amount: item.amount,
           productSizeId: item.productSizeId ?? undefined,
-          comment: item.comment?.trim() || undefined,
+          comment: [item.comment?.trim(), input.customer.comment?.trim()].filter(Boolean).join(" · ") || undefined,
           modifiers: item.modifiers?.map((modifier) => ({
             productId: modifier.productId,
             amount: modifier.amount,

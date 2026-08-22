@@ -13,7 +13,7 @@ const envSchema = z.object({
   IIKO_CLIENT_SECRET: z.string().optional().default(""),
   IIKO_ORGANIZATION_ID: z.string().optional().default(""),
   IIKO_TERMINAL_GROUP_ID: z.string().optional().default(""),
-  ORDER_STATUS_CHECK_INTERVAL_MINUTES: z.coerce.number().optional().default(5)
+  ORDER_STATUS_CHECK_INTERVAL_MINUTES: z.coerce.number().optional().default(1)
 });
 
 export const env = envSchema.parse(process.env);
