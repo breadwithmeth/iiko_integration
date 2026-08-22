@@ -10,7 +10,7 @@ export function OrderDetailsPage() {
   const data = order.data;
 
   const canCancel = data?.status === "SUBMITTING" || data?.status === "CREATED";
-  const canPrintBill = data?.iikoOrderId && (data?.status === "CREATED" || data?.status === "CLOSED" || data?.status === "SUBMITTING");
+  const canPrintBill = data?.iikoOrderId && data?.status === "CREATED";
 
   const handleCancel = async () => {
     if (!id) return;

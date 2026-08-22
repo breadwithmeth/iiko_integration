@@ -186,29 +186,31 @@ if (products.some(p => !isDishWithPositivePrice(p))) {
           .catch(err => console.error(`Background status check failed for order ${updated.id}:`, err));
       }
 
-      // Print bill and close order after creation (non-blocking)
-      if (updated.iikoOrderId && updated.organization?.iikoId) {
+      // Print bill and close order after creation (only if status is CREATED)
+      if (updated.iikoOrderId && updated.organization?.iikoId && status === "CREATED") {
         // Print bill first
         statusService.printBill(updated.iikoOrderId, updated.organization.iikoId)
           .then(printResponse => {
             if (printResponse) {
               console.log(`Print bill response for order ${updated.iikoOrderId}:`, printResponse);
+              
+              // After successful print, wait 10 seconds then close order
+              setTimeout(() => {
+                statusService.closeOrder(updated.iikoOrderId!, updated.organization!.iikoId)
+                  .then(closeResponse => {
+                    if (closeResponse) {
+                      console.log(`Close order response for order ${updated.iikoOrderId}:`, closeResponse);
+                    } else {
+                      console.log(`Close order returned no response for order ${updated.iikoOrderId}`);
+                    }
+                  })
+                  .catch(err => console.error(`Close order failed for order ${updated.iikoOrderId}:`, err));
+              }, 10000); // 10 seconds delay
             } else {
               console.log(`Print bill returned no response for order ${updated.iikoOrderId}`);
             }
           })
           .catch(err => console.error(`Print bill failed for order ${updated.iikoOrderId}:`, err));
-
-        // Then close order
-        statusService.closeOrder(updated.iikoOrderId, updated.organization.iikoId)
-          .then(closeResponse => {
-            if (closeResponse) {
-              console.log(`Close order response for order ${updated.iikoOrderId}:`, closeResponse);
-            } else {
-              console.log(`Close order returned no response for order ${updated.iikoOrderId}`);
-            }
-          })
-          .catch(err => console.error(`Close order failed for order ${updated.iikoOrderId}:`, err));
       }
       
       return serializeOrder(updated);
