@@ -19,6 +19,7 @@ enum OrderStatus {
   FAILED
   UNKNOWN
   CANCELLED
+  CLOSED
 }
 
 model User {

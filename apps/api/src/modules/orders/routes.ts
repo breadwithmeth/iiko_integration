@@ -188,29 +188,55 @@ if (products.some(p => !isDishWithPositivePrice(p))) {
 
       // Print bill and close order after creation (only if status is CREATED)
       if (updated.iikoOrderId && updated.organization?.iikoId && status === "CREATED") {
+        const orgIikoId = updated.organization.iikoId;
+        const iikoOrderId = updated.iikoOrderId;
+        
         // Print bill first
-        statusService.printBill(updated.iikoOrderId, updated.organization.iikoId)
+        statusService.printBill(iikoOrderId, orgIikoId)
           .then(printResponse => {
+            const printSuccess = printResponse?.orderInfo?.printStatus === "Success" || printResponse?.orderInfo?.printStatus === "Printed";
+            
             if (printResponse) {
-              console.log(`Print bill response for order ${updated.iikoOrderId}:`, printResponse);
-              
-              // After successful print, wait 10 seconds then close order
-              setTimeout(() => {
-                statusService.closeOrder(updated.iikoOrderId!, updated.organization!.iikoId)
-                  .then(closeResponse => {
-                    if (closeResponse) {
-                      console.log(`Close order response for order ${updated.iikoOrderId}:`, closeResponse);
-                    } else {
-                      console.log(`Close order returned no response for order ${updated.iikoOrderId}`);
-                    }
-                  })
-                  .catch(err => console.error(`Close order failed for order ${updated.iikoOrderId}:`, err));
-              }, 10000); // 10 seconds delay
+              console.log(`Print bill response for order ${iikoOrderId}:`, printResponse);
+              console.log(`Print bill ${printSuccess ? 'SUCCEEDED' : 'FAILED/NO_STATUS'} for order ${iikoOrderId}`);
             } else {
-              console.log(`Print bill returned no response for order ${updated.iikoOrderId}`);
+              console.log(`Print bill returned no response for order ${iikoOrderId}`);
             }
+            
+            // Always try to close order after print bill attempt
+            const delay = printSuccess ? 10000 : 5000;
+            console.log(`Scheduling close order for ${iikoOrderId} in ${delay}ms (printSuccess: ${printSuccess})`);
+            
+            setTimeout(() => {
+              statusService.closeOrder(iikoOrderId, orgIikoId)
+                .then(closeResponse => {
+                  if (closeResponse) {
+                    console.log(`Close order response for order ${iikoOrderId}:`, closeResponse);
+                    const closeSuccess = closeResponse.orderInfo?.closeStatus === "Success" || closeResponse.orderInfo?.closeStatus === "Closed";
+                    console.log(`Close order ${closeSuccess ? 'SUCCEEDED' : 'FAILED/NO_STATUS'} for order ${iikoOrderId}`);
+                  } else {
+                    console.log(`Close order returned no response for order ${iikoOrderId}`);
+                  }
+                })
+                .catch(err => console.error(`Close order failed for order ${iikoOrderId}:`, err));
+            }, delay);
           })
-          .catch(err => console.error(`Print bill failed for order ${updated.iikoOrderId}:`, err));
+          .catch(err => {
+            console.error(`Print bill failed for order ${iikoOrderId}:`, err);
+            // Even if print bill throws, try to close order after 5 seconds
+            console.log(`Print bill threw error, scheduling close order for ${iikoOrderId} in 5000ms`);
+            setTimeout(() => {
+              statusService.closeOrder(iikoOrderId, orgIikoId)
+                .then(closeResponse => {
+                  if (closeResponse) {
+                    console.log(`Close order response for order ${iikoOrderId}:`, closeResponse);
+                  } else {
+                    console.log(`Close order returned no response for order ${iikoOrderId}`);
+                  }
+                })
+                .catch(closeErr => console.error(`Close order failed for order ${iikoOrderId}:`, closeErr));
+            }, 5000);
+          });
       }
       
       return serializeOrder(updated);
@@ -382,6 +408,61 @@ if (products.some(p => !isDishWithPositivePrice(p))) {
     } catch (error) {
       console.error(`Failed to print bill for order ${order.id}:`, error);
       return reply.code(500).send({ message: "Internal server error while printing bill" });
+    }
+  });
+
+  app.post("/api/orders/:id/close", { preHandler: [app.authenticate] }, async (request, reply) => {
+    const params = z.object({ id: z.string().uuid() }).parse(request.params);
+    const order = await prisma.order.findUnique({
+      where: { id: params.id },
+      include: { organization: true }
+    });
+
+    if (!order || (request.user.role === "OPERATOR" && order.operatorId !== request.user.sub)) {
+      return reply.code(404).send({ message: "Order not found" });
+    }
+
+    if (!order.iikoOrderId) {
+      return reply.code(400).send({ message: "Order has no iiko order ID" });
+    }
+
+    if (!order.organization?.iikoId) {
+      return reply.code(400).send({ message: "Order organization not synced" });
+    }
+
+    const auth = new IikoAuthService();
+    const statusService = new IikoOrderStatusService(auth);
+
+    try {
+      const closeRequest = {
+        organizationId: order.organization.iikoId,
+        orderId: order.iikoOrderId,
+        chequeAdditionalInfo: {
+          needReceipt: true,
+          isInternetPayment: true
+        }
+      };
+      console.log(`[CLOSE_ORDER] Manual request for order ${order.iikoOrderId}:`, JSON.stringify(closeRequest));
+
+      const closeResponse = await statusService.closeOrder(order.iikoOrderId, order.organization.iikoId);
+
+      if (!closeResponse) {
+        return reply.code(500).send({ message: "Failed to close order: no response from iiko" });
+      }
+
+      const closeStatus = closeResponse.orderInfo?.closeStatus;
+      const errorInfo = closeResponse.orderInfo?.errorInfo;
+
+      if (closeStatus === "Success" || closeStatus === "Closed") {
+        await prisma.auditLog.create({ data: { userId: request.user.sub, event: "order.close", entity: "Order", entityId: order.id } });
+        return { success: true, message: "Заказ закрыт", closeResponse };
+      } else {
+        const errorMessage = errorInfo?.message ?? errorInfo?.description ?? `iiko close status: ${closeStatus}`;
+        return reply.code(400).send({ message: errorMessage, closeResponse });
+      }
+    } catch (error) {
+      console.error(`Failed to close order ${order.id}:`, error);
+      return reply.code(500).send({ message: "Internal server error while closing order" });
     }
   });
 }

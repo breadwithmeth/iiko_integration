@@ -144,27 +144,36 @@ export class IikoOrderStatusService {
       return;
     }
 
-    // Map iiko creationStatus to our internal status
-    // The /1/order/by_id endpoint returns creationStatus: "Success" | "InProgress" | "Error"
+    // Map iiko order status to our internal status
+    // iiko status values: "New", "Bill", "Closed", "Deleted", etc.
+    // creationStatus values: "Success", "InProgress", "Error"
+    const iikoStatus = iikoOrder.status as string | undefined;
     const creationStatus = iikoOrder.creationStatus as string | undefined;
-    const status = this.mapCreationStatus(creationStatus);
+    
+    // First try to map from actual order status, fall back to creationStatus
+    const status = this.mapIikoOrderStatus(iikoStatus) ?? this.mapCreationStatus(creationStatus);
 
     // Check if status changed to CREATED (was not CREATED before)
     const wasCreated = order.status === "CREATED";
     const isNowCreated = status === "CREATED";
     const shouldTriggerPrintBill = isNowCreated && !wasCreated;
 
+    // Also check if order became CLOSED
+    const wasClosed = order.status === "CLOSED";
+    const isNowClosed = status === "CLOSED";
+    const shouldUpdateClosed = isNowClosed && !wasClosed;
+
     await prisma.order.update({
       where: { id: orderId },
       data: {
         status,
-        iikoStatus: iikoOrder.status ?? creationStatus,
+        iikoStatus: iikoStatus ?? creationStatus,
         lastStatusCheckAt: new Date(),
         lastStatusResponse: response as unknown as Prisma.InputJsonValue
       }
     });
 
-    console.log(`Updated order ${orderId} status to ${status} (iiko creationStatus: ${creationStatus})`);
+    console.log(`Updated order ${orderId} status to ${status} (iiko status: ${iikoStatus}, creationStatus: ${creationStatus})`);
 
     // Trigger print bill when order becomes CREATED
     if (shouldTriggerPrintBill && order.organizationId) {
@@ -178,26 +187,50 @@ export class IikoOrderStatusService {
         console.log(`Order ${orderId} became CREATED, triggering print bill...`);
         this.printBill(iikoOrderId, organization.iikoId)
           .then(printResponse => {
+            const printSuccess = printResponse?.orderInfo?.printStatus === "Success" || printResponse?.orderInfo?.printStatus === "Printed";
+            
             if (printResponse) {
               console.log(`Print bill response for order ${iikoOrderId}:`, printResponse);
-              
-              // After successful print, wait 10 seconds then close order
-              setTimeout(() => {
-                this.closeOrder(iikoOrderId, organization.iikoId)
-                  .then(closeResponse => {
-                    if (closeResponse) {
-                      console.log(`Close order response for order ${iikoOrderId}:`, closeResponse);
-                    } else {
-                      console.log(`Close order returned no response for order ${iikoOrderId}`);
-                    }
-                  })
-                  .catch(err => console.error(`Close order failed for order ${iikoOrderId}:`, err));
-              }, 10000); // 10 seconds delay
+              console.log(`Print bill ${printSuccess ? 'SUCCEEDED' : 'FAILED/NO_STATUS'} for order ${iikoOrderId}`);
             } else {
               console.log(`Print bill returned no response for order ${iikoOrderId}`);
             }
+            
+            // Always try to close order after print bill attempt (success or failure)
+            // Wait 10 seconds if print succeeded, 5 seconds if failed
+            const delay = printSuccess ? 10000 : 5000;
+            console.log(`Scheduling close order for ${iikoOrderId} in ${delay}ms (printSuccess: ${printSuccess})`);
+            
+            setTimeout(() => {
+              this.closeOrder(iikoOrderId, organization.iikoId)
+                .then(closeResponse => {
+                  if (closeResponse) {
+                    console.log(`Close order response for order ${iikoOrderId}:`, closeResponse);
+                    const closeSuccess = closeResponse.orderInfo?.closeStatus === "Success" || closeResponse.orderInfo?.closeStatus === "Closed";
+                    console.log(`Close order ${closeSuccess ? 'SUCCEEDED' : 'FAILED/NO_STATUS'} for order ${iikoOrderId}`);
+                  } else {
+                    console.log(`Close order returned no response for order ${iikoOrderId}`);
+                  }
+                })
+                .catch(err => console.error(`Close order failed for order ${iikoOrderId}:`, err));
+            }, delay);
           })
-          .catch(err => console.error(`Print bill failed for order ${iikoOrderId}:`, err));
+          .catch(err => {
+            console.error(`Print bill failed for order ${iikoOrderId}:`, err);
+            // Even if print bill throws, try to close order after 5 seconds
+            console.log(`Print bill threw error, scheduling close order for ${iikoOrderId} in 5000ms`);
+            setTimeout(() => {
+              this.closeOrder(iikoOrderId, organization.iikoId)
+                .then(closeResponse => {
+                  if (closeResponse) {
+                    console.log(`Close order response for order ${iikoOrderId}:`, closeResponse);
+                  } else {
+                    console.log(`Close order returned no response for order ${iikoOrderId}`);
+                  }
+                })
+                .catch(closeErr => console.error(`Close order failed for order ${iikoOrderId}:`, closeErr));
+            }, 5000);
+          });
       }
     }
   }
@@ -274,5 +307,26 @@ export class IikoOrderStatusService {
     };
 
     return statusMap[creationStatus] || OrderStatus.UNKNOWN;
+  }
+
+  /**
+   * Map iiko order status to internal status
+   * iiko status values: "New", "Bill", "Closed", "Deleted", "Cooking", "Ready", etc.
+   */
+  private mapIikoOrderStatus(iikoStatus: string | undefined): OrderStatus | null {
+    if (!iikoStatus) return null;
+
+    const statusMap: Record<string, OrderStatus> = {
+      "New": OrderStatus.CREATED,
+      "Bill": OrderStatus.CREATED,       // Bill printed, order active
+      "Closed": OrderStatus.CLOSED,      // Order closed
+      "Deleted": OrderStatus.CANCELLED,  // Order deleted/cancelled
+      "Cooking": OrderStatus.CREATED,    // Being prepared
+      "Ready": OrderStatus.CREATED,      // Ready for pickup/delivery
+      "Delivery": OrderStatus.CREATED,   // Out for delivery
+      "Paid": OrderStatus.CREATED,       // Paid but not closed
+    };
+
+    return statusMap[iikoStatus] ?? null;
   }
 }

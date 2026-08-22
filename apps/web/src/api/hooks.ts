@@ -117,6 +117,17 @@ export function usePrintBill() {
   });
 }
 
+export function useCloseOrder() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (orderId: string) => api<{ success: boolean; message?: string; closeResponse?: unknown }>(`/api/orders/${orderId}/close`, { method: "POST" }),
+    onSuccess: (_, orderId) => {
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["orders", orderId] });
+    }
+  });
+}
+
 export interface OrderDto {
   id: string;
   externalNumber: string;

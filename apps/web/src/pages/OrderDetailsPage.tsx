@@ -1,29 +1,38 @@
 import { useParams } from "react-router-dom";
 import { formatMoney } from "../api/client";
-import { useOrder, useCancelOrder, usePrintBill } from "../api/hooks";
+import { useOrder, useCancelOrder, usePrintBill, useCloseOrder } from "../api/hooks";
 
 export function OrderDetailsPage() {
   const { id } = useParams();
   const order = useOrder(id);
   const cancelOrder = useCancelOrder();
   const printBill = usePrintBill();
+  const closeOrder = useCloseOrder();
   const data = order.data;
 
   const canCancel = data?.status === "SUBMITTING" || data?.status === "CREATED";
   const canPrintBill = data?.iikoOrderId && data?.status === "CREATED";
+  const canCloseOrder = data?.iikoOrderId && (data?.status === "CREATED" || data?.status === "CLOSED");
 
   const handleCancel = async () => {
     if (!id) return;
     const confirmed = window.confirm("Вы уверены, что хотите отменить этот заказ?");
     if (!confirmed) return;
     await cancelOrder.mutateAsync(id);
-    // The query invalidation will refresh the data
   };
 
   const handlePrintBill = async () => {
     if (!id) return;
     await printBill.mutateAsync(id);
     alert("Чек отправлен на печать");
+  };
+
+  const handleCloseOrder = async () => {
+    if (!id) return;
+    const confirmed = window.confirm("Вы уверены, что хотите закрыть этот заказ?");
+    if (!confirmed) return;
+    await closeOrder.mutateAsync(id);
+    alert("Заказ закрыт");
   };
 
   if (order.isLoading) return <div className="page-panel">Загрузка...</div>;
@@ -69,6 +78,15 @@ export function OrderDetailsPage() {
             disabled={printBill.isPending}
           >
             {printBill.isPending ? "Печать..." : "🖨 Печать чека"}
+          </button>
+        )}
+        {canCloseOrder && (
+          <button
+            className="secondary-button"
+            onClick={handleCloseOrder}
+            disabled={closeOrder.isPending}
+          >
+            {closeOrder.isPending ? "Закрытие..." : "🔒 Закрыть заказ"}
           </button>
         )}
         {canCancel && (
