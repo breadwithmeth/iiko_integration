@@ -1,14 +1,16 @@
 import { useParams } from "react-router-dom";
 import { formatMoney } from "../api/client";
-import { useOrder, useCancelOrder } from "../api/hooks";
+import { useOrder, useCancelOrder, usePrintBill } from "../api/hooks";
 
 export function OrderDetailsPage() {
   const { id } = useParams();
   const order = useOrder(id);
   const cancelOrder = useCancelOrder();
+  const printBill = usePrintBill();
   const data = order.data;
 
   const canCancel = data?.status === "SUBMITTING" || data?.status === "CREATED";
+  const canPrintBill = data?.iikoOrderId && (data?.status === "CREATED" || data?.status === "CLOSED" || data?.status === "SUBMITTING");
 
   const handleCancel = async () => {
     if (!id) return;
@@ -16,6 +18,12 @@ export function OrderDetailsPage() {
     if (!confirmed) return;
     await cancelOrder.mutateAsync(id);
     // The query invalidation will refresh the data
+  };
+
+  const handlePrintBill = async () => {
+    if (!id) return;
+    await printBill.mutateAsync(id);
+    alert("Чек отправлен на печать");
   };
 
   if (order.isLoading) return <div className="page-panel">Загрузка...</div>;
@@ -53,15 +61,26 @@ export function OrderDetailsPage() {
         </tbody>
       </table>
       <div className="detail-total">Итого: {formatMoney(data.total)}</div>
-      {canCancel && (
-        <button
-          className="danger-button"
-          onClick={handleCancel}
-          disabled={cancelOrder.isPending}
-        >
-          {cancelOrder.isPending ? "Отмена..." : "Отменить заказ"}
-        </button>
-      )}
+      <div className="detail-actions">
+        {canPrintBill && (
+          <button
+            className="primary-button"
+            onClick={handlePrintBill}
+            disabled={printBill.isPending}
+          >
+            {printBill.isPending ? "Печать..." : "🖨 Печать чека"}
+          </button>
+        )}
+        {canCancel && (
+          <button
+            className="danger-button"
+            onClick={handleCancel}
+            disabled={cancelOrder.isPending}
+          >
+            {cancelOrder.isPending ? "Отмена..." : "Отменить заказ"}
+          </button>
+        )}
+      </div>
     </section>
   );
 }

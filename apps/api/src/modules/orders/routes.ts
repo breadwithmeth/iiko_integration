@@ -337,6 +337,51 @@ if (products.some(p => !isDishWithPositivePrice(p))) {
       return reply.code(500).send({ message: "Internal server error while cancelling order" });
     }
   });
+
+  app.post("/api/orders/:id/print-bill", { preHandler: [app.authenticate] }, async (request, reply) => {
+    const params = z.object({ id: z.string().uuid() }).parse(request.params);
+    const order = await prisma.order.findUnique({
+      where: { id: params.id },
+      include: { organization: true }
+    });
+
+    if (!order || (request.user.role === "OPERATOR" && order.operatorId !== request.user.sub)) {
+      return reply.code(404).send({ message: "Order not found" });
+    }
+
+    if (!order.iikoOrderId) {
+      return reply.code(400).send({ message: "Order has no iiko order ID" });
+    }
+
+    if (!order.organization?.iikoId) {
+      return reply.code(400).send({ message: "Order organization not synced" });
+    }
+
+    const auth = new IikoAuthService();
+    const statusService = new IikoOrderStatusService(auth);
+
+    try {
+      const printResponse = await statusService.printBill(order.iikoOrderId, order.organization.iikoId);
+
+      if (!printResponse) {
+        return reply.code(500).send({ message: "Failed to print bill: no response from iiko" });
+      }
+
+      const printStatus = printResponse.orderInfo?.printStatus;
+      const errorInfo = printResponse.orderInfo?.errorInfo;
+
+      if (printStatus === "Success" || printStatus === "Printed") {
+        await prisma.auditLog.create({ data: { userId: request.user.sub, event: "order.print_bill", entity: "Order", entityId: order.id } });
+        return { success: true, message: "Чек отправлен на печать", printResponse };
+      } else {
+        const errorMessage = errorInfo?.message ?? errorInfo?.description ?? `iiko print status: ${printStatus}`;
+        return reply.code(400).send({ message: errorMessage, printResponse });
+      }
+    } catch (error) {
+      console.error(`Failed to print bill for order ${order.id}:`, error);
+      return reply.code(500).send({ message: "Internal server error while printing bill" });
+    }
+  });
 }
 
 const orderInclude = {

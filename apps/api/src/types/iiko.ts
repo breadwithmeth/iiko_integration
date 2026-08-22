@@ -85,6 +85,10 @@ export interface IikoOrder {
   orderTypeId: string;
   sourceKey?: string;
   externalData?: Array<{ key: string; value: string; isPublic: boolean }>;
+  chequeAdditionalInfo?: {
+    needReceipt: boolean;
+    isInternetPayment: boolean;
+  };
 }
 
 export interface IikoOrderCreateRequest {

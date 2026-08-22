@@ -23,6 +23,7 @@ export class IikoOrderBuilder {
     return {
       organizationId: input.organizationId,
       terminalGroupId: input.terminalGroupId,
+      
       order: {
         id: input.orderId,
         externalNumber: input.externalNumber,
@@ -65,7 +66,11 @@ export class IikoOrderBuilder {
             isPrepay: false
           }
         ],
-        orderTypeId: input.orderTypeId
+        orderTypeId: input.orderTypeId,
+        chequeAdditionalInfo: {
+          needReceipt: true,
+          isInternetPayment: true
+        }
       },
       createOrderSettings: {
         servicePrint: true,
