@@ -18,13 +18,12 @@ type NomenclatureResponse = {
 export class IikoNomenclatureService {
   constructor(private readonly client: IikoHttpClient) {}
 
-  async syncMenu(organizationIikoId = env.IIKO_ORGANIZATION_ID) {
+  async syncMenu(organizationIikoId = env.IIKO_ORGANIZATION_ID, limit = 1000) {
     const organization = await prisma.organization.findUnique({ where: { iikoId: organizationIikoId } });
     if (!organization) {
       throw new HttpError("Organization must be synchronized before menu", 400);
     }
 
-    const limit = 100;
     let offset = 0;
     const seen = new Set<string>();
     let synced = 0;
