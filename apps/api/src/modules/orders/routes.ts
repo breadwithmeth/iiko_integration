@@ -8,7 +8,7 @@ import { IikoAuthService } from "../../services/IikoAuthService.js";
 import { IikoHttpClient, IikoHttpError } from "../../services/IikoHttpClient.js";
 import { IikoOrderBuilder } from "../../services/IikoOrderBuilder.js";
 import { IikoOrderStatusService } from "../../services/IikoOrderStatusService.js";
-import { isDishWithPositivePrice } from "../../services/productValidator.js";
+import { isDishOrGoodsWithPositivePrice } from "../../services/productValidator.js";
 import type { IikoOrderCreateResponse, IikoOrderCancelResponse } from "../../types/iiko.js";
 
 const modifierSchema = z.object({
@@ -103,12 +103,12 @@ export async function orderRoutes(app: FastifyInstance) {
   return reply.code(400).send({ message: "One or more products are unavailable" });
 }
 
-// Ensure all ordered products are DISH with a positive price
-if (products.some(p => !isDishWithPositivePrice(p))) {
-  return reply
-    .code(400)
-    .send({ message: "One or more ordered products are not DISH or have zero price" });
-}
+// Ensure all ordered products are DISH or GOODS with a positive price
+	if (products.some(p => !isDishOrGoodsWithPositivePrice(p))) {
+	  return reply
+	    .code(400)
+	    .send({ message: "One or more ordered products are not DISH/GOODS or have zero price" });
+	}
 
     const phone = normalizePhone(input.customer.phone);
     const total = calculateTotal(input.items);

@@ -1,7 +1,7 @@
 import { KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCcw, Search } from "lucide-react";
 import type { ProductDto } from "@iiko-call-center/shared";
-import { isValidDish } from "../utils/product";
+import { isValidDishOrGoods } from "../utils/product";
 import { ApiError, formatMoney } from "../api/client";
 import { useCreateOrder, useOrderTypes, useOrganizations, usePaymentTypes, useProducts, useSyncMenu, useTerminalGroups, useSyncDirectories } from "../api/hooks";
 import { CartPanel } from "../components/CartPanel";
@@ -62,7 +62,7 @@ export function NewOrderPage() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  const productItems = (products.data?.items ?? []).filter(isValidDish);
+  const productItems = (products.data?.items ?? []).filter(isValidDishOrGoods);
   const paymentType = paymentTypes.data?.find((item) => item.iikoId === paymentTypeId);
   const canSubmit = Boolean(organizationId && terminalGroupId && orderTypeId && paymentTypeId && customer.phone && items.length && !createOrder.isPending);
 

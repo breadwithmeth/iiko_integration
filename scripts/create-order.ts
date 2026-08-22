@@ -6,7 +6,7 @@
  *
  * The script will:
  *   1. Fetch the first organization, terminal group, and order type.
- *   2. Use the provided productId (must be a DISH with a positive price).
+ *   2. Use the provided productId (must be a DISH or GOODS with a positive price).
  *   3. POST /api/orders with a correctly‑formatted UUID for orderTypeId.
  *
  * Adjust the values (or extend the script) to suit your test scenario.
@@ -66,8 +66,8 @@ async function main() {
   const product = await getJson<any>(`${API_BASE}/api/products?search=&category=&page=1`);
   const prod = (product.items ?? []).find((p: any) => p.productId === productId);
   if (!prod) throw new Error(`Product ${productId} not found`);
-  if (prod.type !== 'DISH' || Number(prod.defaultSalePrice) <= 0) {
-    throw new Error('Selected product is not a valid DISH with a positive price');
+  if (!['DISH', 'GOODS'].includes(prod.type) || Number(prod.defaultSalePrice) <= 0) {
+    throw new Error('Selected product is not a valid DISH/GOODS with a positive price');
   }
 
   const payload = {
