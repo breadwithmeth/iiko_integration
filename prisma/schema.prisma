@@ -7,34 +7,18 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum Role {
-  ADMIN
-  OPERATOR
-}
-
-enum OrderStatus {
-  DRAFT
-  SUBMITTING
-  CREATED
-  FAILED
-  UNKNOWN
-  CANCELLED
-  CLOSED
-}
-
 model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
+  id           String     @id @default(uuid())
+  email        String     @unique
   name         String
   passwordHash String
-  role         Role     @default(OPERATOR)
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  sessions Session[]
-  orders   Order[]
-  auditLogs AuditLog[]
+  role         Role       @default(OPERATOR)
+  active       Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  auditLogs    AuditLog[]
+  orders       Order[]
+  sessions     Session[]
 }
 
 model Session {
@@ -46,86 +30,81 @@ model Session {
   expiresAt DateTime
   revokedAt DateTime?
   createdAt DateTime  @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Organization {
-  id                         String   @id @default(uuid())
-  iikoId                     String   @unique
-  name                       String
-  country                    String?
-  restaurantAddress          String?
-  currencyIsoName            String?
-  isCloud                    Boolean?
+  id                             String          @id @default(uuid())
+  iikoId                         String          @unique
+  name                           String
+  country                        String?
+  restaurantAddress              String?
+  currencyIsoName                String?
+  isCloud                        Boolean?
   defaultCallCenterPaymentTypeId String?
-  rawData                    Json
-  createdAt                  DateTime @default(now())
-  updatedAt                  DateTime @updatedAt
-
-  terminalGroups TerminalGroup[]
-  products       Product[]
-  productGroups  ProductGroup[]
-  paymentTypes   PaymentType[]
-  orderTypes     OrderType[]
-  orders         Order[]
+  rawData                        Json
+  createdAt                      DateTime        @default(now())
+  updatedAt                      DateTime        @updatedAt
+  orders                         Order[]
+  orderTypes                     OrderType[]
+  paymentTypes                   PaymentType[]
+  products                       Product[]
+  productGroups                  ProductGroup[]
+  terminalGroups                 TerminalGroup[]
 }
 
 model TerminalGroup {
-  id             String   @id @default(uuid())
-  iikoId         String   @unique
+  id             String       @id @default(uuid())
+  iikoId         String       @unique
   organizationId String
   name           String
   address        String?
-  disabled       Boolean  @default(false)
+  disabled       Boolean      @default(false)
   rawData        Json
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  orders       Order[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  orders         Order[]
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 }
 
 model ProductGroup {
-  id             String   @id @default(uuid())
-  groupId        String   @unique
+  id             String       @id @default(uuid())
+  groupId        String       @unique
   organizationId String
   name           String
   parentGroupId  String?
   rawData        Json
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  products     Product[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  products       Product[]
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 }
 
 model Product {
-  id                   String   @id @default(uuid())
-  productId            String   @unique
-  organizationId        String?
-  name                 String
-  type                 String
-  article              String?
-  code                 String?
-  description          String?
-  parentGroupId        String?
-  defaultSalePrice     Decimal  @db.Decimal(12, 2)
-  imageUrl             String?
-  productSizeId        String?
-  modifierSchemaId     String?
+  id                          String        @id @default(uuid())
+  productId                   String        @unique
+  organizationId              String?
+  name                        String
+  type                        String
+  article                     String?
+  code                        String?
+  description                 String?
+  parentGroupId               String?
+  defaultSalePrice            Decimal       @db.Decimal(12, 2)
+  imageUrl                    String?
+  productSizeId               String?
+  modifierSchemaId            String?
   modifierSchemaRedefinitions Json?
-  modifiers            Json?
-  rawData              Json
-  revision             String?
-  modifiedAt           DateTime?
-  deleted              Boolean  @default(false)
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
-
-  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
-  group        ProductGroup? @relation(fields: [parentGroupId], references: [groupId])
-  orderItems   OrderItem[]
+  modifiers                   Json?
+  rawData                     Json
+  revision                    String?
+  modifiedAt                  DateTime?
+  deleted                     Boolean       @default(false)
+  createdAt                   DateTime      @default(now())
+  updatedAt                   DateTime      @updatedAt
+  orderItems                  OrderItem[]
+  organization                Organization? @relation(fields: [organizationId], references: [id])
+  group                       ProductGroup? @relation(fields: [parentGroupId], references: [groupId])
 
   @@index([name])
   @@index([article])
@@ -142,77 +121,73 @@ model Customer {
   comment   String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  orders Order[]
+  orders    Order[]
 
   @@unique([phone, email])
   @@index([phone])
 }
 
 model PaymentType {
-  id             String   @id @default(uuid())
-  iikoId         String   @unique
+  id             String       @id @default(uuid())
+  iikoId         String       @unique
   organizationId String
   name           String
   kind           String
   code           String?
-  isDeleted      Boolean  @default(false)
+  isDeleted      Boolean      @default(false)
   rawData        Json
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  orders       Order[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  orders         Order[]
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 }
 
 model OrderType {
-  id             String   @id @default(uuid())
-  iikoId         String   @unique
-  organizationId String
-  name           String
+  id               String       @id @default(uuid())
+  iikoId           String       @unique
+  organizationId   String
+  name             String
   orderServiceType String?
-  isDeleted      Boolean  @default(false)
-  rawData        Json
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  orders       Order[]
+  isDeleted        Boolean      @default(false)
+  rawData          Json
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  orders           Order[]
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 }
 
 model Order {
-  id               String      @id @default(uuid())
-  idempotencyKey   String?     @unique
-  externalNumber   String      @unique
-  iikoOrderId      String?
-  iikoPosId        String?
-  correlationId    String?
-  organizationId   String
-  terminalGroupId  String
-  orderTypeId      String?
-  paymentTypeId    String?
-  customerId       String
-  operatorId       String
-  status           OrderStatus @default(DRAFT)
-  iikoStatus       String?
-  total            Decimal     @db.Decimal(12, 2)
-  requestPayload   Json?
-  responsePayload  Json?
-  errorPayload     Json?
-  errorMessage     String?
-  submittedAt      DateTime?
-  lastStatusCheckAt DateTime?
+  id                 String        @id @default(uuid())
+  idempotencyKey     String?       @unique
+  externalNumber     String        @unique
+  iikoOrderId        String?
+  iikoPosId          String?
+  correlationId      String?
+  organizationId     String
+  terminalGroupId    String
+  orderTypeId        String?
+  paymentTypeId      String?
+  customerId         String
+  operatorId         String
+  status             OrderStatus   @default(DRAFT)
+  total              Decimal       @db.Decimal(12, 2)
+  requestPayload     Json?
+  responsePayload    Json?
+  errorPayload       Json?
+  errorMessage       String?
+  submittedAt        DateTime?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  iikoStatus         String?
+  lastStatusCheckAt  DateTime?
   lastStatusResponse Json?
-  createdAt        DateTime    @default(now())
-  updatedAt        DateTime    @updatedAt
-
-  organization  Organization @relation(fields: [organizationId], references: [id])
-  terminalGroup TerminalGroup @relation(fields: [terminalGroupId], references: [id])
-  orderType     OrderType?    @relation(fields: [orderTypeId], references: [id])
-  paymentType   PaymentType?  @relation(fields: [paymentTypeId], references: [id])
-  customer      Customer      @relation(fields: [customerId], references: [id])
-  operator      User          @relation(fields: [operatorId], references: [id])
-  items         OrderItem[]
+  customer           Customer      @relation(fields: [customerId], references: [id])
+  operator           User          @relation(fields: [operatorId], references: [id])
+  orderType          OrderType?    @relation(fields: [orderTypeId], references: [id])
+  organization       Organization  @relation(fields: [organizationId], references: [id])
+  paymentType        PaymentType?  @relation(fields: [paymentTypeId], references: [id])
+  terminalGroup      TerminalGroup @relation(fields: [terminalGroupId], references: [id])
+  items              OrderItem[]
 }
 
 model OrderItem {
@@ -227,23 +202,22 @@ model OrderItem {
   comment       String?
   modifiers     Json?
   createdAt     DateTime @default(now())
-
-  order   Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  order         Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product       Product? @relation(fields: [productId], references: [id])
 }
 
 model IikoApiLog {
-  id             String   @id @default(uuid())
-  event          String
-  method         String
-  path           String
-  httpStatus     Int?
-  latencyMs      Int?
-  correlationId  String?
-  requestBody    Json?
-  responseBody   Json?
-  errorBody      Json?
-  createdAt      DateTime @default(now())
+  id            String   @id @default(uuid())
+  event         String
+  method        String
+  path          String
+  httpStatus    Int?
+  latencyMs     Int?
+  correlationId String?
+  requestBody   Json?
+  responseBody  Json?
+  errorBody     Json?
+  createdAt     DateTime @default(now())
 }
 
 model ApiError {
@@ -262,6 +236,20 @@ model AuditLog {
   entityId  String?
   metadata  Json?
   createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id])
+}
 
-  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+enum Role {
+  ADMIN
+  OPERATOR
+}
+
+enum OrderStatus {
+  DRAFT
+  SUBMITTING
+  CREATED
+  FAILED
+  UNKNOWN
+  CANCELLED
+  CLOSED
 }

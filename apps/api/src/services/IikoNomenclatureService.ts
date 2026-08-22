@@ -24,24 +24,35 @@ export class IikoNomenclatureService {
       throw new HttpError("Organization must be synchronized before menu", 400);
     }
 
+    // Some iiko endpoints have a max limit of 100
+    const effectiveLimit = Math.min(limit, 1000);
+    
     let offset = 0;
     const seen = new Set<string>();
     let synced = 0;
     let revision: string | undefined;
+    let total: number | undefined;
 
     while (true) {
       const data = await this.client.post<NomenclatureResponse>(
         "/nomenclature/v1/product/list",
-        { limit, offset, withCount: true, withTotalCount: true, filters: [] },
+        { limit: effectiveLimit, offset, withCount: true, withTotalCount: true, filters: [] },
         "iiko.nomenclature.products"
       );
       revision = data.revision === undefined ? revision : String(data.revision);
       const products = data.products ?? data.items ?? [];
-const groups = data.productGroups ?? data.groups ?? [];
-// Build a set of group IDs that were present in this response,
-// so we can safely reference them when linking products.
-const groupIds = new Set<string>(groups.map((g) => g.id));
-for (const group of groups) {
+      const groups = data.productGroups ?? data.groups ?? [];
+
+      // Capture total from first response (iiko may not return totalCount on subsequent pages)
+      if (total === undefined) {
+        total = data.totalCount ?? data.count;
+        console.log(`[syncMenu] Total products: ${total}, limit: ${effectiveLimit}, offset: ${offset}, received: ${products.length}`);
+      }
+
+      // Build a set of group IDs that were present in this response,
+      // so we can safely reference them when linking products.
+      const groupIds = new Set<string>(groups.map((g) => g.id));
+      for (const group of groups) {
         await prisma.productGroup.upsert({
           where: { groupId: group.id },
           update: {
@@ -107,9 +118,10 @@ for (const group of groups) {
         synced += 1;
       }
 
-      const total = data.totalCount ?? data.count;
       offset += products.length;
-      if (products.length < limit || (total !== undefined && offset >= total)) {
+      console.log(`[syncMenu] Page done: synced=${synced}, offset=${offset}, total=${total}, productsInPage=${products.length}`);
+      // Stop if: fewer products than limit (last page), or we've reached the known total
+      if (products.length < effectiveLimit || (total !== undefined && offset >= total)) {
         break;
       }
     }

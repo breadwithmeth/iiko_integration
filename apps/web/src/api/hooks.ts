@@ -50,7 +50,7 @@ export function usePaymentTypes(organizationId?: string) {
 }
 
 export function useProducts(search: string, category?: string, page = 1) {
-  const params = new URLSearchParams({ search, page: String(page), pageSize: "80" });
+  const params = new URLSearchParams({ search, page: String(page), pageSize: "1000" });
   if (category) params.set("category", category);
   return useQuery({
     queryKey: ["products", search, category, page],
