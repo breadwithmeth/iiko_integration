@@ -19,10 +19,13 @@ export class IikoNomenclatureService {
   constructor(private readonly client: IikoHttpClient) {}
 
   async syncMenu(organizationIikoId = env.IIKO_ORGANIZATION_ID, limit = 1000) {
+    console.log(`[syncMenu] Starting sync for organization: ${organizationIikoId}`);
     const organization = await prisma.organization.findUnique({ where: { iikoId: organizationIikoId } });
     if (!organization) {
+      console.error(`[syncMenu] Organization not found: ${organizationIikoId}`);
       throw new HttpError("Organization must be synchronized before menu", 400);
     }
+    console.log(`[syncMenu] Organization found: ${organization.name} (${organization.id})`);
 
     // Some iiko endpoints have a max limit of 100
     const effectiveLimit = Math.min(limit, 1000);
@@ -34,11 +37,13 @@ export class IikoNomenclatureService {
     let total: number | undefined;
 
     while (true) {
+      console.log(`[syncMenu] Fetching page: offset=${offset}, limit=${effectiveLimit}`);
       const data = await this.client.post<NomenclatureResponse>(
         "/nomenclature/v1/product/list",
         { limit: effectiveLimit, offset, withCount: true, withTotalCount: true, filters: [] },
         "iiko.nomenclature.products"
       );
+      console.log(`[syncMenu] Response received: revision=${data.revision}, totalCount=${data.totalCount}, count=${data.count}, products.length=${(data.products ?? data.items ?? []).length}`);
       revision = data.revision === undefined ? revision : String(data.revision);
       const products = data.products ?? data.items ?? [];
       const groups = data.productGroups ?? data.groups ?? [];

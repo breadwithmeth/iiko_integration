@@ -9,6 +9,7 @@ import { IikoHttpClient, IikoHttpError } from "../../services/IikoHttpClient.js"
 import { IikoOrderBuilder } from "../../services/IikoOrderBuilder.js";
 import { IikoOrderStatusService } from "../../services/IikoOrderStatusService.js";
 import { isDishOrGoodsWithPositivePrice } from "../../services/productValidator.js";
+import { requireRole } from "../../middleware/auth.js";
 import type { IikoOrderCreateResponse, IikoOrderCancelResponse } from "../../types/iiko.js";
 
 const modifierSchema = z.object({
@@ -281,6 +282,73 @@ export async function orderRoutes(app: FastifyInstance) {
       prisma.order.count({ where })
     ]);
     return { items: items.map(serializeOrder), total };
+});
+
+// Statistics endpoint - only for ADMIN
+  app.get("/api/orders/stats", requireRole(app, ["ADMIN"]), async (request) => {
+    const query = z.object({
+      date: z.string().optional(),
+      operatorId: z.string().optional()
+    }).parse(request.query);
+
+    const where: Prisma.OrderWhereInput = {};
+    if (query.operatorId) where.operatorId = query.operatorId;
+    if (query.date) {
+      const from = new Date(`${query.date}T00:00:00.000Z`);
+      const to = new Date(from);
+      to.setUTCDate(to.getUTCDate() + 1);
+      where.createdAt = { gte: from, lt: to };
+    }
+
+    // Get orders with operator info
+    const orders = await prisma.order.findMany({
+      where,
+      include: { operator: { select: { id: true, name: true, email: true } } },
+      orderBy: { createdAt: "desc" }
+    });
+
+    // Aggregate by operator
+    const statsByOperator = new Map<string, {
+      operator: { id: string; name: string; email: string };
+      totalOrders: number;
+      totalAmount: number;
+      ordersByStatus: Record<string, number>;
+    }>();
+
+    for (const order of orders) {
+      const operatorKey = order.operatorId;
+      const existing = statsByOperator.get(operatorKey);
+      const amount = Number(order.total);
+
+      if (existing) {
+        existing.totalOrders += 1;
+        existing.totalAmount += amount;
+        existing.ordersByStatus[order.status] = (existing.ordersByStatus[order.status] || 0) + 1;
+      } else {
+        statsByOperator.set(operatorKey, {
+          operator: order.operator,
+          totalOrders: 1,
+          totalAmount: amount,
+          ordersByStatus: { [order.status]: 1 }
+        });
+      }
+    }
+
+    // Convert to array and sort by total amount desc
+    const operatorStats = Array.from(statsByOperator.values()).sort((a, b) => b.totalAmount - a.totalAmount);
+
+    // Overall totals
+    const totalOrders = orders.length;
+    const totalAmount = orders.reduce((sum, o) => sum + Number(o.total), 0);
+    const ordersByStatus = orders.reduce((acc, o) => {
+      acc[o.status] = (acc[o.status] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    return {
+      summary: { totalOrders, totalAmount, ordersByStatus },
+      byOperator: operatorStats
+    };
   });
 
   app.get("/api/orders/:id", { preHandler: [app.authenticate] }, async (request, reply) => {

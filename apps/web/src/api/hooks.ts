@@ -128,6 +128,30 @@ export function useCloseOrder() {
   });
 }
 
+export function useOrderStats(date?: string) {
+  const params = new URLSearchParams();
+  if (date) params.set("date", date);
+  return useQuery({
+    queryKey: ["order-stats", date],
+    queryFn: () => api<OrderStatsResponse>(`/api/orders/stats?${params.toString()}`),
+    enabled: true
+  });
+}
+
+export interface OrderStatsResponse {
+  summary: {
+    totalOrders: number;
+    totalAmount: number;
+    ordersByStatus: Record<string, number>;
+  };
+  byOperator: Array<{
+    operator: { id: string; name: string; email: string };
+    totalOrders: number;
+    totalAmount: number;
+    ordersByStatus: Record<string, number>;
+  }>;
+}
+
 export interface OrderDto {
   id: string;
   externalNumber: string;
