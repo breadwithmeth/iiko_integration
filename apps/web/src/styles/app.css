@@ -562,6 +562,116 @@ button:disabled {
   padding: 0 10px;
 }
 
+/* Period Selector */
+.period-selector {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.period-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid #c8d3dc;
+  border-radius: 6px;
+  background: #ffffff;
+  font-size: 14px;
+  color: #1b3b5f;
+  cursor: pointer;
+  min-width: 220px;
+  justify-content: space-between;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.period-trigger:hover {
+  border-color: #2576a8;
+}
+
+.period-trigger:focus {
+  outline: none;
+  border-color: #2576a8;
+  box-shadow: 0 0 0 3px rgba(37, 118, 168, 0.15);
+}
+
+.period-trigger svg {
+  color: #687685;
+  flex-shrink: 0;
+}
+
+.period-trigger .rotated {
+  transform: rotate(180deg);
+}
+
+.period-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  border: 1px solid #c8d3dc;
+  border-radius: 6px;
+  background: #ffffff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  z-index: 100;
+  overflow: hidden;
+}
+
+.period-option {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  color: #3d4652;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.period-option:hover {
+  background: #f0f7fb;
+}
+
+.period-option.active {
+  background: #e8f5ff;
+  color: #0d6ab8;
+  font-weight: 600;
+}
+
+.custom-date-inputs {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.custom-date-inputs label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: #3d4652;
+}
+
+.custom-date-inputs input[type="date"] {
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid #c8d3dc;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.custom-date-inputs input[type="date"]:focus {
+  outline: none;
+  border-color: #2576a8;
+  box-shadow: 0 0 0 2px rgba(37, 118, 168, 0.15);
+}
+
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

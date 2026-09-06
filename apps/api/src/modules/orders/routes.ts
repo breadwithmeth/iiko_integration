@@ -287,18 +287,36 @@ export async function orderRoutes(app: FastifyInstance) {
 // Statistics endpoint - only for ADMIN
   app.get("/api/orders/stats", requireRole(app, ["ADMIN"]), async (request) => {
     const query = z.object({
-      date: z.string().optional(),
+      date: z.string().optional(),        // Single day (backward compatibility)
+      dateFrom: z.string().optional(),    // Period start (inclusive)
+      dateTo: z.string().optional(),      // Period end (inclusive)
       operatorId: z.string().optional()
     }).parse(request.query);
 
     const where: Prisma.OrderWhereInput = {};
     if (query.operatorId) where.operatorId = query.operatorId;
+
+    // Date filtering logic
     if (query.date) {
+      // Single day - backward compatible
       const from = new Date(`${query.date}T00:00:00.000Z`);
       const to = new Date(from);
       to.setUTCDate(to.getUTCDate() + 1);
       where.createdAt = { gte: from, lt: to };
+    } else if (query.dateFrom || query.dateTo) {
+      // Date range
+      const createdAtFilter: Prisma.DateTimeFilter = {};
+      if (query.dateFrom) {
+        const from = new Date(`${query.dateFrom}T00:00:00.000Z`);
+        createdAtFilter.gte = from;
+      }
+      if (query.dateTo) {
+        const to = new Date(`${query.dateTo}T23:59:59.999Z`);
+        createdAtFilter.lte = to;
+      }
+      where.createdAt = createdAtFilter;
     }
+    // If no date params provided - no date filter (all time)
 
     // Get orders with operator info
     const orders = await prisma.order.findMany({

@@ -128,11 +128,12 @@ export function useCloseOrder() {
   });
 }
 
-export function useOrderStats(date?: string) {
+export function useOrderStats(dateFrom?: string, dateTo?: string) {
   const params = new URLSearchParams();
-  if (date) params.set("date", date);
+  if (dateFrom) params.set("dateFrom", dateFrom);
+  if (dateTo) params.set("dateTo", dateTo);
   return useQuery({
-    queryKey: ["order-stats", date],
+    queryKey: ["order-stats", dateFrom, dateTo],
     queryFn: () => api<OrderStatsResponse>(`/api/orders/stats?${params.toString()}`),
     enabled: true
   });
