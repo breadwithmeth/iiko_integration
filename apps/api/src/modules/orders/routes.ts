@@ -296,6 +296,9 @@ export async function orderRoutes(app: FastifyInstance) {
     const where: Prisma.OrderWhereInput = {};
     if (query.operatorId) where.operatorId = query.operatorId;
 
+    // Exclude FAILED orders (ошибка)
+    where.status = { not: "FAILED" };
+
     // Date filtering logic
     if (query.date) {
       // Single day - backward compatible
