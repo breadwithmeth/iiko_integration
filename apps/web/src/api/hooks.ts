@@ -139,6 +139,17 @@ export function useOrderStats(dateFrom?: string, dateTo?: string) {
   });
 }
 
+export function useOperatorOrders(operatorId: string, dateFrom?: string, dateTo?: string) {
+  const params = new URLSearchParams({ operator: operatorId });
+  if (dateFrom) params.set("dateFrom", dateFrom);
+  if (dateTo) params.set("dateTo", dateTo);
+  return useQuery({
+    queryKey: ["operator-orders", operatorId, dateFrom, dateTo],
+    queryFn: () => api<{ items: OrderDto[]; total: number }>(`/api/orders?${params.toString()}`),
+    enabled: Boolean(operatorId)
+  });
+}
+
 export interface OrderStatsResponse {
   summary: {
     totalOrders: number;

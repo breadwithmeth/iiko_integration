@@ -49,6 +49,8 @@ const createOrderSchema = z.object({
 
 const listQuerySchema = z.object({
   date: z.string().optional(),
+  dateFrom: z.string().optional(),
+  dateTo: z.string().optional(),
   phone: z.string().optional(),
   externalNumber: z.string().optional(),
   status: z.string().optional(),
@@ -264,12 +266,28 @@ export async function orderRoutes(app: FastifyInstance) {
     if (query.externalNumber) where.externalNumber = { contains: query.externalNumber, mode: "insensitive" };
     if (query.operator && request.user.role === "ADMIN") where.operatorId = query.operator;
     if (query.phone) where.customer = { phone: { contains: normalizePhone(query.phone).replace("+", ""), mode: "insensitive" } };
+
+    // Date filtering logic
     if (query.date) {
+      // Single day - backward compatible
       const from = new Date(`${query.date}T00:00:00.000Z`);
       const to = new Date(from);
       to.setUTCDate(to.getUTCDate() + 1);
       where.createdAt = { gte: from, lt: to };
+    } else if (query.dateFrom || query.dateTo) {
+      // Date range
+      const createdAtFilter: Prisma.DateTimeFilter = {};
+      if (query.dateFrom) {
+        const from = new Date(`${query.dateFrom}T00:00:00.000Z`);
+        createdAtFilter.gte = from;
+      }
+      if (query.dateTo) {
+        const to = new Date(`${query.dateTo}T23:59:59.999Z`);
+        createdAtFilter.lte = to;
+      }
+      where.createdAt = createdAtFilter;
     }
+    // If no date params provided - no date filter
 
     const [items, total] = await Promise.all([
       prisma.order.findMany({
