@@ -150,6 +150,37 @@ export function useOperatorOrders(operatorId: string, dateFrom?: string, dateTo?
   });
 }
 
+export function useUptKpi(dateFrom?: string, dateTo?: string) {
+  const params = new URLSearchParams();
+  if (dateFrom) params.set("dateFrom", dateFrom);
+  if (dateTo) params.set("dateTo", dateTo);
+  return useQuery({
+    queryKey: ["upt-kpi", dateFrom, dateTo],
+    queryFn: () => api<UptKpiResponse>(`/api/orders/upt-kpi?${params.toString()}`),
+    enabled: true
+  });
+}
+
+export interface UptKpiResponse {
+  summary: {
+    totalOrders: number;
+    totalItems: number;
+    totalAmount: number;
+    upt: number;
+    avgCheck: number;
+    ordersByStatus: Record<string, number>;
+  };
+  byOperator: Array<{
+    operator: { id: string; name: string; email: string };
+    totalOrders: number;
+    totalItems: number;
+    totalAmount: number;
+    upt: number;
+    avgCheck: number;
+    ordersByStatus: Record<string, number>;
+  }>;
+}
+
 export interface OrderStatsResponse {
   summary: {
     totalOrders: number;

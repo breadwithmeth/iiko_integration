@@ -1,4 +1,4 @@
-import { LogOut, PackageSearch, Settings, ShoppingCart, TableProperties, Users, BarChart3 } from "lucide-react";
+import { LogOut, PackageSearch, Settings, ShoppingCart, TableProperties, Users, BarChart3, Target } from "lucide-react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { useAuthStore } from "../stores/authStore";
@@ -22,6 +22,7 @@ export function AppLayout() {
           <NavLink to="/orders/new"><ShoppingCart size={18} /> Новый заказ</NavLink>
           <NavLink to="/orders"><TableProperties size={18} /> История</NavLink>
           {user?.role === "ADMIN" && <NavLink to="/statistics"><BarChart3 size={18} /> Статистика</NavLink>}
+          {user?.role === "ADMIN" && <NavLink to="/upt-kpi"><Target size={18} /> UPT KPI</NavLink>}
           <NavLink to="/products"><PackageSearch size={18} /> Товары</NavLink>
           {user?.role === "ADMIN" && <NavLink to="/settings/iiko"><Settings size={18} /> iiko</NavLink>}
           {user?.role === "ADMIN" && <NavLink to="/settings/users"><Users size={18} /> Операторы</NavLink>}

@@ -390,6 +390,112 @@ export async function orderRoutes(app: FastifyInstance) {
     };
   });
 
+  // UPT KPI endpoint - Units Per Transaction (average items per order)
+  app.get("/api/orders/upt-kpi", requireRole(app, ["ADMIN"]), async (request) => {
+    const query = z.object({
+      date: z.string().optional(),
+      dateFrom: z.string().optional(),
+      dateTo: z.string().optional(),
+      operatorId: z.string().optional()
+    }).parse(request.query);
+
+    const where: Prisma.OrderWhereInput = {};
+    if (query.operatorId) where.operatorId = query.operatorId;
+
+    // Exclude FAILED orders
+    where.status = { not: "FAILED" };
+
+    // Date filtering logic (same as stats endpoint)
+    if (query.date) {
+      const from = new Date(`${query.date}T00:00:00.000Z`);
+      const to = new Date(from);
+      to.setUTCDate(to.getUTCDate() + 1);
+      where.createdAt = { gte: from, lt: to };
+    } else if (query.dateFrom || query.dateTo) {
+      const createdAtFilter: Prisma.DateTimeFilter = {};
+      if (query.dateFrom) {
+        const from = new Date(`${query.dateFrom}T00:00:00.000Z`);
+        createdAtFilter.gte = from;
+      }
+      if (query.dateTo) {
+        const to = new Date(`${query.dateTo}T23:59:59.999Z`);
+        createdAtFilter.lte = to;
+      }
+      where.createdAt = createdAtFilter;
+    }
+
+    // Get orders with items to calculate UPT
+    const orders = await prisma.order.findMany({
+      where,
+      include: {
+        operator: { select: { id: true, name: true, email: true } },
+        items: { select: { amount: true } }
+      },
+      orderBy: { createdAt: "desc" }
+    });
+
+    // Aggregate by operator
+    const statsByOperator = new Map<string, {
+      operator: { id: string; name: string; email: string };
+      totalOrders: number;
+      totalItems: number;
+      totalAmount: number;
+      ordersByStatus: Record<string, number>;
+    }>();
+
+    for (const order of orders) {
+      const operatorKey = order.operatorId;
+      const existing = statsByOperator.get(operatorKey);
+      const amount = Number(order.total);
+      const itemsCount = order.items.reduce((sum, item) => sum + Number(item.amount), 0);
+
+      if (existing) {
+        existing.totalOrders += 1;
+        existing.totalItems += itemsCount;
+        existing.totalAmount += amount;
+        existing.ordersByStatus[order.status] = (existing.ordersByStatus[order.status] || 0) + 1;
+      } else {
+        statsByOperator.set(operatorKey, {
+          operator: order.operator,
+          totalOrders: 1,
+          totalItems: itemsCount,
+          totalAmount: amount,
+          ordersByStatus: { [order.status]: 1 }
+        });
+      }
+    }
+
+    // Convert to array and sort by UPT desc
+    const operatorStats = Array.from(statsByOperator.values())
+      .map(op => ({
+        ...op,
+        upt: op.totalOrders > 0 ? Number((op.totalItems / op.totalOrders).toFixed(2)) : 0,
+        avgCheck: op.totalOrders > 0 ? Math.round(op.totalAmount / op.totalOrders) : 0
+      }))
+      .sort((a, b) => b.upt - a.upt);
+
+    // Overall totals
+    const totalOrders = orders.length;
+    const totalItems = orders.reduce((sum, o) => sum + o.items.reduce((s, i) => s + Number(i.amount), 0), 0);
+    const totalAmount = orders.reduce((sum, o) => sum + Number(o.total), 0);
+    const ordersByStatus = orders.reduce((acc, o) => {
+      acc[o.status] = (acc[o.status] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    return {
+      summary: {
+        totalOrders,
+        totalItems,
+        totalAmount,
+        upt: totalOrders > 0 ? Number((totalItems / totalOrders).toFixed(2)) : 0,
+        avgCheck: totalOrders > 0 ? Math.round(totalAmount / totalOrders) : 0,
+        ordersByStatus
+      },
+      byOperator: operatorStats
+    };
+  });
+
   app.get("/api/orders/:id", { preHandler: [app.authenticate] }, async (request, reply) => {
     const params = z.object({ id: z.string().uuid() }).parse(request.params);
     const order = await prisma.order.findUnique({ where: { id: params.id }, include: orderInclude });
