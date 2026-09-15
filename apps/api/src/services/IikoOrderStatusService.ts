@@ -4,12 +4,42 @@ import { IikoHttpClient } from "./IikoHttpClient.js";
 import { IikoAuthService } from "./IikoAuthService.js";
 import type { IikoOrderStatusRequest, IikoOrderStatusResponse, IikoOrderCancelRequest, IikoOrderCancelResponse, IikoPrintBillRequest, IikoPrintBillResponse, IikoCloseOrderRequest, IikoCloseOrderResponse } from "../types/iiko.js";
 import { env } from "../lib/env.js";
+import type { FastifyBaseLogger } from "fastify";
+
+export type PrintTrigger = "manual" | "auto_creation" | "auto_polling";
+
+export interface PrintBillOptions {
+  trigger: PrintTrigger;
+  orderId: string;
+  iikoOrderId: string;
+  organizationId: string;
+  userId?: string;
+}
+
+export interface PrintBillResult {
+  success: boolean;
+  printStatus?: string;
+  errorInfo?: { message?: string; description?: string };
+  response?: IikoPrintBillResponse;
+  durationMs: number;
+}
 
 export class IikoOrderStatusService {
   private readonly client: IikoHttpClient;
+  private readonly logger?: FastifyBaseLogger;
 
-  constructor(auth?: IikoAuthService) {
+  constructor(auth?: IikoAuthService, logger?: FastifyBaseLogger) {
     this.client = new IikoHttpClient(auth || new IikoAuthService());
+    this.logger = logger;
+  }
+
+  private log(level: "info" | "error" | "warn", msg: string, meta?: Record<string, unknown>) {
+    if (this.logger) {
+      this.logger[level](meta, msg);
+    } else {
+      const prefix = level === "error" ? "[ERROR]" : level === "warn" ? "[WARN]" : "[INFO]";
+      console[level === "error" ? "error" : "log"](`${prefix} ${msg}`, meta ?? "");
+    }
   }
 
   /**
@@ -64,17 +94,48 @@ export class IikoOrderStatusService {
   /**
    * Print bill/receipt for an order via iiko API
    */
-  async printBill(orderId: string, organizationId: string): Promise<IikoPrintBillResponse | null> {
+  async printBill(orderId: string, organizationId: string): Promise<IikoPrintBillResponse | null>;
+  async printBill(options: PrintBillOptions): Promise<PrintBillResult>;
+  async printBill(
+    orderIdOrOptions: string | PrintBillOptions,
+    organizationId?: string
+  ): Promise<IikoPrintBillResponse | null | PrintBillResult> {
+    // Handle both old signature (orderId, organizationId) and new signature (options)
+    let options: PrintBillOptions;
+    if (typeof orderIdOrOptions === "string") {
+      // Legacy call - create minimal options
+      options = {
+        trigger: "manual",
+        orderId: orderIdOrOptions,
+        iikoOrderId: orderIdOrOptions,
+        organizationId: organizationId!,
+      };
+    } else {
+      options = orderIdOrOptions;
+    }
+
+    const { trigger, orderId, iikoOrderId, organizationId: orgId, userId } = options;
+    const startTime = Date.now();
+
     const request: IikoPrintBillRequest = {
-      organizationId,
-      orderId,
+      organizationId: orgId,
+      orderId: iikoOrderId,
       chequeAdditionalInfo: {
         needReceipt: true,
         isInternetPayment: true
       }
     };
 
-    console.log(`[PRINT_BILL] Sending request for order ${orderId}:`, JSON.stringify(request));
+    const logMeta = {
+      trigger,
+      orderId,
+      iikoOrderId,
+      organizationId: orgId,
+      userId,
+      request,
+    };
+
+    this.log("info", "Print bill request", logMeta);
 
     try {
       const response = await this.client.post<IikoPrintBillResponse>(
@@ -82,12 +143,56 @@ export class IikoOrderStatusService {
         request as unknown as Record<string, unknown>,
         "iiko.order.print_bill"
       );
-      
-      console.log(`[PRINT_BILL] Response for order ${orderId}:`, JSON.stringify(response));
+
+      const durationMs = Date.now() - startTime;
+      const printStatus = response?.orderInfo?.printStatus;
+      const errorInfo = response?.orderInfo?.errorInfo;
+      const success = printStatus === "Success" || printStatus === "Printed";
+
+      const responseMeta = {
+        ...logMeta,
+        printStatus,
+        errorInfo,
+        success,
+        durationMs,
+        response,
+      };
+
+      if (success) {
+        this.log("info", "Print bill succeeded", responseMeta);
+      } else {
+        this.log("warn", "Print bill failed or no status", responseMeta);
+      }
+
+      // Return new structured result if called with options
+      if (typeof orderIdOrOptions !== "string") {
+        return {
+          success,
+          printStatus,
+          errorInfo,
+          response,
+          durationMs,
+        };
+      }
+
       return response;
     } catch (error) {
-      // Log error but don't throw - we'll handle it in the caller
-      console.error(`[PRINT_BILL] Failed for order ${orderId}:`, error);
+      const durationMs = Date.now() - startTime;
+      const errorMeta = {
+        ...logMeta,
+        error: error instanceof Error ? error.message : String(error),
+        durationMs,
+      };
+      this.log("error", "Print bill request failed", errorMeta);
+      
+      if (typeof orderIdOrOptions !== "string") {
+        return {
+          success: false,
+          errorInfo: { message: error instanceof Error ? error.message : "Unknown error" },
+          durationMs,
+        };
+      }
+      
       return null;
     }
   }
@@ -184,51 +289,100 @@ export class IikoOrderStatusService {
       });
       
       if (organization?.iikoId) {
-        console.log(`Order ${orderId} became CREATED, triggering print bill...`);
-        this.printBill(iikoOrderId, organization.iikoId)
-          .then(printResponse => {
-            const printSuccess = printResponse?.orderInfo?.printStatus === "Success" || printResponse?.orderInfo?.printStatus === "Printed";
+        this.log("info", "Order became CREATED, triggering auto print bill", {
+          trigger: "auto_polling",
+          orderId,
+          iikoOrderId,
+          organizationId: organization.iikoId,
+        });
+        
+        this.printBill({
+          trigger: "auto_polling",
+          orderId,
+          iikoOrderId,
+          organizationId: organization.iikoId,
+        }).then(printResult => {
+            const printSuccess = printResult.success;
             
-            if (printResponse) {
-              console.log(`Print bill response for order ${iikoOrderId}:`, printResponse);
-              console.log(`Print bill ${printSuccess ? 'SUCCEEDED' : 'FAILED/NO_STATUS'} for order ${iikoOrderId}`);
-            } else {
-              console.log(`Print bill returned no response for order ${iikoOrderId}`);
-            }
+            this.log("info", "Auto print bill completed", {
+              trigger: "auto_polling",
+              orderId,
+              iikoOrderId,
+              printSuccess,
+              printStatus: printResult.printStatus,
+              durationMs: printResult.durationMs,
+            });
             
             // Always try to close order after print bill attempt (success or failure)
             // Wait 10 seconds if print succeeded, 5 seconds if failed
             const delay = printSuccess ? 10000 : 5000;
-            console.log(`Scheduling close order for ${iikoOrderId} in ${delay}ms (printSuccess: ${printSuccess})`);
+            this.log("info", "Scheduling close order", {
+              trigger: "auto_polling",
+              orderId,
+              iikoOrderId,
+              delayMs: delay,
+              printSuccess,
+            });
             
             setTimeout(() => {
-              this.closeOrder(iikoOrderId, organization.iikoId)
+              this.closeOrder(iikoOrderId, organization.iikoId!)
                 .then(closeResponse => {
                   if (closeResponse) {
-                    console.log(`Close order response for order ${iikoOrderId}:`, closeResponse);
                     const closeSuccess = closeResponse.orderInfo?.closeStatus === "Success" || closeResponse.orderInfo?.closeStatus === "Closed";
-                    console.log(`Close order ${closeSuccess ? 'SUCCEEDED' : 'FAILED/NO_STATUS'} for order ${iikoOrderId}`);
+                    this.log("info", "Close order completed", {
+                      trigger: "auto_polling",
+                      orderId,
+                      iikoOrderId,
+                      closeSuccess,
+                      closeStatus: closeResponse.orderInfo?.closeStatus,
+                    });
                   } else {
-                    console.log(`Close order returned no response for order ${iikoOrderId}`);
+                    this.log("warn", "Close order returned no response", {
+                      trigger: "auto_polling",
+                      orderId,
+                      iikoOrderId,
+                    });
                   }
                 })
-                .catch(err => console.error(`Close order failed for order ${iikoOrderId}:`, err));
+                .catch(err => this.log("error", "Close order failed", {
+                  trigger: "auto_polling",
+                  orderId,
+                  iikoOrderId,
+                  error: err instanceof Error ? err.message : String(err),
+                }));
             }, delay);
           })
           .catch(err => {
-            console.error(`Print bill failed for order ${iikoOrderId}:`, err);
+            this.log("error", "Print bill threw error, scheduling close order", {
+              trigger: "auto_polling",
+              orderId,
+              iikoOrderId,
+              error: err instanceof Error ? err.message : String(err),
+            });
             // Even if print bill throws, try to close order after 5 seconds
-            console.log(`Print bill threw error, scheduling close order for ${iikoOrderId} in 5000ms`);
             setTimeout(() => {
-              this.closeOrder(iikoOrderId, organization.iikoId)
+              this.closeOrder(iikoOrderId, organization.iikoId!)
                 .then(closeResponse => {
                   if (closeResponse) {
-                    console.log(`Close order response for order ${iikoOrderId}:`, closeResponse);
+                    this.log("info", "Close order completed (after print error)", {
+                      trigger: "auto_polling",
+                      orderId,
+                      iikoOrderId,
+                    });
                   } else {
-                    console.log(`Close order returned no response for order ${iikoOrderId}`);
+                    this.log("warn", "Close order returned no response (after print error)", {
+                      trigger: "auto_polling",
+                      orderId,
+                      iikoOrderId,
+                    });
                   }
                 })
-                .catch(closeErr => console.error(`Close order failed for order ${iikoOrderId}:`, closeErr));
+                .catch(closeErr => this.log("error", "Close order failed (after print error)", {
+                  trigger: "auto_polling",
+                  orderId,
+                  iikoOrderId,
+                  error: closeErr instanceof Error ? closeErr.message : String(closeErr),
+                }));
             }, 5000);
           });
       }

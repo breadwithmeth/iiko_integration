@@ -193,51 +193,73 @@ export async function orderRoutes(app: FastifyInstance) {
       if (updated.iikoOrderId && updated.organization?.iikoId && status === "CREATED") {
         const orgIikoId = updated.organization.iikoId;
         const iikoOrderId = updated.iikoOrderId;
-        
+
+        const logMeta = {
+          trigger: "auto_creation" as const,
+          orderId: updated.id,
+          iikoOrderId,
+          organizationId: orgIikoId,
+          userId: request.user.sub,
+        };
+
+        request.log.info(logMeta, "Auto print bill after creation triggered");
+
         // Print bill first
-        statusService.printBill(iikoOrderId, orgIikoId)
-          .then(printResponse => {
-            const printSuccess = printResponse?.orderInfo?.printStatus === "Success" || printResponse?.orderInfo?.printStatus === "Printed";
-            
+        statusService.printBill({
+          trigger: "auto_creation",
+          orderId: updated.id,
+          iikoOrderId,
+          organizationId: orgIikoId,
+          userId: request.user.sub,
+        })
+          .then(printResult => {
+            const { success, printStatus, errorInfo, response: printResponse, durationMs } = printResult;
+            const printSuccess = success;
+
+            const responseMeta = {
+              ...logMeta,
+              printStatus,
+              errorInfo,
+              success: printSuccess,
+              durationMs,
+            };
+
             if (printResponse) {
-              console.log(`Print bill response for order ${iikoOrderId}:`, printResponse);
-              console.log(`Print bill ${printSuccess ? 'SUCCEEDED' : 'FAILED/NO_STATUS'} for order ${iikoOrderId}`);
+              request.log.info(responseMeta, "Auto print bill after creation completed");
             } else {
-              console.log(`Print bill returned no response for order ${iikoOrderId}`);
+              request.log.warn(responseMeta, "Auto print bill after creation returned no response");
             }
-            
+
             // Always try to close order after print bill attempt
             const delay = printSuccess ? 10000 : 5000;
-            console.log(`Scheduling close order for ${iikoOrderId} in ${delay}ms (printSuccess: ${printSuccess})`);
-            
+            request.log.info({ ...logMeta, delayMs: delay, printSuccess }, "Scheduling close order after creation");
+
             setTimeout(() => {
               statusService.closeOrder(iikoOrderId, orgIikoId)
                 .then(closeResponse => {
                   if (closeResponse) {
-                    console.log(`Close order response for order ${iikoOrderId}:`, closeResponse);
                     const closeSuccess = closeResponse.orderInfo?.closeStatus === "Success" || closeResponse.orderInfo?.closeStatus === "Closed";
-                    console.log(`Close order ${closeSuccess ? 'SUCCEEDED' : 'FAILED/NO_STATUS'} for order ${iikoOrderId}`);
+                    request.log.info({ ...logMeta, closeSuccess, closeStatus: closeResponse.orderInfo?.closeStatus }, "Close order after creation completed");
                   } else {
-                    console.log(`Close order returned no response for order ${iikoOrderId}`);
+                    request.log.warn({ ...logMeta }, "Close order after creation returned no response");
                   }
                 })
-                .catch(err => console.error(`Close order failed for order ${iikoOrderId}:`, err));
+                .catch(err => request.log.error({ ...logMeta, error: err instanceof Error ? err.message : String(err) }, "Close order after creation failed"));
             }, delay);
           })
           .catch(err => {
-            console.error(`Print bill failed for order ${iikoOrderId}:`, err);
+            request.log.error({ ...logMeta, error: err instanceof Error ? err.message : String(err) }, "Auto print bill after creation threw error, scheduling close order");
             // Even if print bill throws, try to close order after 5 seconds
-            console.log(`Print bill threw error, scheduling close order for ${iikoOrderId} in 5000ms`);
             setTimeout(() => {
               statusService.closeOrder(iikoOrderId, orgIikoId)
                 .then(closeResponse => {
                   if (closeResponse) {
-                    console.log(`Close order response for order ${iikoOrderId}:`, closeResponse);
+                    request.log.info({ ...logMeta }, "Close order after creation completed (after print error)");
                   } else {
-                    console.log(`Close order returned no response for order ${iikoOrderId}`);
+                    request.log.warn({ ...logMeta }, "Close order after creation returned no response (after print error)");
                   }
                 })
-                .catch(closeErr => console.error(`Close order failed for order ${iikoOrderId}:`, closeErr));
+                .catch(closeErr => request.log.error({ ...logMeta, error: closeErr instanceof Error ? closeErr.message : String(closeErr) }, "Close order after creation failed (after print error)"));
             }, 5000);
           });
       }
@@ -599,27 +621,53 @@ export async function orderRoutes(app: FastifyInstance) {
     }
 
     const auth = new IikoAuthService();
-    const statusService = new IikoOrderStatusService(auth);
+    const statusService = new IikoOrderStatusService(auth, request.log);
+
+    const logMeta = {
+      trigger: "manual" as const,
+      orderId: order.id,
+      iikoOrderId: order.iikoOrderId,
+      organizationId: order.organization.iikoId,
+      userId: request.user.sub,
+    };
+
+    request.log.info(logMeta, "Manual print bill request");
 
     try {
-      const printResponse = await statusService.printBill(order.iikoOrderId, order.organization.iikoId);
+      const printResult = await statusService.printBill({
+        trigger: "manual",
+        orderId: order.id,
+        iikoOrderId: order.iikoOrderId,
+        organizationId: order.organization.iikoId,
+        userId: request.user.sub,
+      });
 
-      if (!printResponse) {
+      if (!printResult.success && !printResult.response) {
+        request.log.error({ ...logMeta, error: printResult.errorInfo?.message }, "Print bill failed: no response");
         return reply.code(500).send({ message: "Failed to print bill: no response from iiko" });
       }
 
-      const printStatus = printResponse.orderInfo?.printStatus;
-      const errorInfo = printResponse.orderInfo?.errorInfo;
+      const { success, printStatus, errorInfo, response: printResponse, durationMs } = printResult;
 
-      if (printStatus === "Success" || printStatus === "Printed") {
+      const responseMeta = {
+        ...logMeta,
+        printStatus,
+        errorInfo,
+        success,
+        durationMs,
+      };
+
+      if (success) {
+        request.log.info(responseMeta, "Manual print bill succeeded");
         await prisma.auditLog.create({ data: { userId: request.user.sub, event: "order.print_bill", entity: "Order", entityId: order.id } });
         return { success: true, message: "Чек отправлен на печать", printResponse };
       } else {
         const errorMessage = errorInfo?.message ?? errorInfo?.description ?? `iiko print status: ${printStatus}`;
+        request.log.warn(responseMeta, "Manual print bill failed");
         return reply.code(400).send({ message: errorMessage, printResponse });
       }
     } catch (error) {
-      console.error(`Failed to print bill for order ${order.id}:`, error);
+      request.log.error({ ...logMeta, error: error instanceof Error ? error.message : String(error) }, "Manual print bill error");
       return reply.code(500).send({ message: "Internal server error while printing bill" });
     }
   });

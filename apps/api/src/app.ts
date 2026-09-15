@@ -36,7 +36,7 @@ export async function buildApp() {
 
   // Initialize order status check service and start scheduled job
   const authService = new IikoAuthService();
-  const orderStatusService = new IikoOrderStatusService(authService);
+  const orderStatusService = new IikoOrderStatusService(authService, app.log);
   
   // Start scheduled order status checking (every 5 minutes by default)
   const checkInterval = parseInt(String(env.ORDER_STATUS_CHECK_INTERVAL_MINUTES), 10) || 5;
