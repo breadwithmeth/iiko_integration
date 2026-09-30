@@ -13,7 +13,11 @@ const envSchema = z.object({
   IIKO_CLIENT_SECRET: z.string().optional().default(""),
   IIKO_ORGANIZATION_ID: z.string().optional().default(""),
   IIKO_TERMINAL_GROUP_ID: z.string().optional().default(""),
-  ORDER_STATUS_CHECK_INTERVAL_MINUTES: z.coerce.number().optional().default(1)
+  ORDER_STATUS_CHECK_INTERVAL_MINUTES: z.coerce.number().optional().default(1),
+  /** Корневая группа, подгруппы которой считаются кухонными категориями (по умолчанию «Кухня») */
+  KITCHEN_ROOT_GROUP_NAME: z.string().default("Кухня"),
+  /** Явный список названий кухонных категорий через запятую. Имеет приоритет над корневой группой */
+  KITCHEN_CATEGORY_NAMES: z.string().optional().default("")
 });
 
 export const env = envSchema.parse(process.env);

@@ -1045,3 +1045,79 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 }
+
+/* Kitchen Bonus Page Styles */
+.tab-switch {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0;
+}
+
+.tab-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: 1px solid #e8eef4;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #3d4652;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tab-button:hover {
+  border-color: #2576a8;
+  color: #2576a8;
+}
+
+.tab-button.active {
+  background: #2576a8;
+  border-color: #2576a8;
+  color: #ffffff;
+}
+
+.bonus-categories {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 16px 0;
+  padding: 12px 16px;
+  background: #f5f7fa;
+  border: 1px solid #e8eef4;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #3d4652;
+}
+
+.bonus-categories-label {
+  font-weight: 600;
+}
+
+.bonus-chip {
+  display: inline-block;
+  padding: 4px 10px;
+  background: #eaf2f8;
+  border: 1px solid #cfe0ec;
+  border-radius: 999px;
+  font-size: 12px;
+  color: #2576a8;
+  white-space: nowrap;
+}
+
+.bonus-warning {
+  margin: 16px 0;
+  padding: 12px 16px;
+  background: #fdf3e3;
+  border: 1px solid #f0d9ae;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #8a5a00;
+}
+
+.bonus-cell {
+  font-weight: 700;
+  color: #1e7042;
+}

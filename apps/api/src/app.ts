@@ -8,6 +8,7 @@ import { HttpError } from "./lib/HttpError.js";
 import { prisma } from "./lib/prisma.js";
 import { authenticate } from "./middleware/auth.js";
 import { authRoutes } from "./modules/auth/routes.js";
+import { bonusRoutes } from "./modules/bonus/routes.js";
 import { iikoRoutes } from "./modules/iiko/routes.js";
 import { orderRoutes } from "./modules/orders/routes.js";
 import { productRoutes } from "./modules/products/routes.js";
@@ -110,6 +111,7 @@ app.setErrorHandler(async (error, _request, reply) => {
   await app.register(iikoRoutes);
   await app.register(productRoutes);
   await app.register(orderRoutes);
+  await app.register(bonusRoutes);
   await app.register(userRoutes);
 
   return app;

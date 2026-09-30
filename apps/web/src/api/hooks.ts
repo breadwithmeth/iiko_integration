@@ -161,6 +161,90 @@ export function useUptKpi(dateFrom?: string, dateTo?: string) {
   });
 }
 
+export interface BonusKitchenMeta {
+  found: boolean;
+  rootGroupName: string;
+  categories: string[];
+}
+
+export interface BonusOrderRow {
+  orderId: string;
+  createdAt: string;
+  externalNumber: string;
+  operator: { id: string; name: string };
+  categories: string[];
+  uniqueCategories: number;
+  kitchenSum: number;
+  percent: number;
+  bonus: number;
+}
+
+export interface BonusOrdersResponse {
+  kitchen: BonusKitchenMeta;
+  summary: { ordersCount: number; kitchenSalesTotal: number; bonusesTotal: number };
+  items: BonusOrderRow[];
+}
+
+export interface BonusOperatorRow {
+  operator: { id: string; name: string };
+  ordersWithKitchen: number;
+  kitchenSalesTotal: number;
+  bonusesTotal: number;
+  payoutTotal: number;
+}
+
+export interface BonusOperatorsResponse {
+  kitchen: BonusKitchenMeta;
+  summary: { ordersWithKitchen: number; kitchenSalesTotal: number; bonusesTotal: number; payoutTotal: number };
+  items: BonusOperatorRow[];
+}
+
+export function useBonusCategories() {
+  return useQuery({
+    queryKey: ["bonus-categories"],
+    queryFn: () => api<BonusKitchenMeta>("/api/bonus/categories")
+  });
+}
+
+export function useBonusOrders(dateFrom?: string, dateTo?: string, operatorId?: string) {
+  const params = new URLSearchParams();
+  if (dateFrom) params.set("dateFrom", dateFrom);
+  if (dateTo) params.set("dateTo", dateTo);
+  if (operatorId) params.set("operatorId", operatorId);
+  return useQuery({
+    queryKey: ["bonus-orders", dateFrom, dateTo, operatorId],
+    queryFn: () => api<BonusOrdersResponse>(`/api/bonus/orders?${params.toString()}`)
+  });
+}
+
+export function useBonusOperators(dateFrom?: string, dateTo?: string, operatorId?: string) {
+  const params = new URLSearchParams();
+  if (dateFrom) params.set("dateFrom", dateFrom);
+  if (dateTo) params.set("dateTo", dateTo);
+  if (operatorId) params.set("operatorId", operatorId);
+  return useQuery({
+    queryKey: ["bonus-operators", dateFrom, dateTo, operatorId],
+    queryFn: () => api<BonusOperatorsResponse>(`/api/bonus/operators?${params.toString()}`)
+  });
+}
+
+export interface UserDto {
+  id: string;
+  email: string;
+  name: string;
+  role: "ADMIN" | "OPERATOR";
+  active: boolean;
+  createdAt: string;
+}
+
+export function useUsers(enabled: boolean) {
+  return useQuery({
+    queryKey: ["users"],
+    queryFn: () => api<UserDto[]>("/api/users"),
+    enabled
+  });
+}
+
 export interface UptKpiResponse {
   summary: {
     totalOrders: number;

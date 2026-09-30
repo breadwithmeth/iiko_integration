@@ -10,13 +10,21 @@ const prismaMock = vi.hoisted(() => ({
 vi.mock("../lib/prisma.js", () => ({ prisma: prismaMock }));
 
 describe("IikoNomenclatureService", () => {
-  it("loads all product pages and marks missing products deleted", async () => {
+  it("loads groups and all product pages and marks missing products deleted", async () => {
     prismaMock.organization.findUnique.mockResolvedValue({ id: "org-db", iikoId: "org-iiko" });
     const productsPage1 = Array.from({ length: 100 }, (_, index) => product(index));
     const productsPage2 = [product(100)];
     const client = {
       post: vi
         .fn()
+        // Первый вызов — группы из /nomenclature/v1/group/list
+        .mockResolvedValueOnce({
+          groups: [
+            { groupId: "group-1", name: "Салаты", parentId: null, isDeleted: false },
+            { groupId: "group-2", name: "Супы", parentId: "group-1", isDeleted: false },
+            { groupId: "group-3", name: "Удаленная группа", parentId: null, isDeleted: true }
+          ]
+        })
         .mockResolvedValueOnce({ totalCount: 101, products: productsPage1 })
         .mockResolvedValueOnce({ totalCount: 101, products: productsPage2 })
     };
@@ -25,8 +33,31 @@ describe("IikoNomenclatureService", () => {
     const result = await new IikoNomenclatureService(client as never).syncMenu("org-iiko", 100);
 
     expect(result.synced).toBe(101);
-    expect(client.post).toHaveBeenCalledTimes(2);
+    expect(client.post).toHaveBeenCalledTimes(3);
+    // Удаленные группы не сохраняются
+    expect(prismaMock.productGroup.upsert).toHaveBeenCalledTimes(2);
+    expect(prismaMock.productGroup.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { groupId: "group-2" }, update: expect.objectContaining({ name: "Супы", parentGroupId: "group-1" }) })
+    );
     expect(prismaMock.product.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: { deleted: true } }));
+  });
+
+  it("links product to its group when the group is known", async () => {
+    prismaMock.organization.findUnique.mockResolvedValue({ id: "org-db", iikoId: "org-iiko" });
+    const client = {
+      post: vi
+        .fn()
+        .mockResolvedValueOnce({ groups: [{ groupId: "salads", name: "Салаты", parentId: null, isDeleted: false }] })
+        .mockResolvedValueOnce({ totalCount: 1, products: [{ ...product(0), parentGroupId: "salads" }] })
+    };
+
+    await new IikoNomenclatureService(client as never).syncMenu("org-iiko", 100);
+
+    expect(prismaMock.product.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ parentGroupId: "salads" })
+      })
+    );
   });
 });
 

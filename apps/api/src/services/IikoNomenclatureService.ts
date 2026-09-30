@@ -15,6 +15,27 @@ type NomenclatureResponse = {
   revision?: string | number;
 };
 
+/** Ответ /nomenclature/v1/group/list — поля отличаются от product/list */
+type NomenclatureGroupsResponse = {
+  groups?: Array<{
+    groupId?: string;
+    id?: string;
+    name?: string;
+    parentId?: string | null;
+    parentGroupId?: string | null;
+    isDeleted?: boolean;
+    [key: string]: unknown;
+  }>;
+};
+
+interface IikoGroupNormalized {
+  id: string;
+  name: string;
+  parentGroupId: string | null;
+  isDeleted: boolean;
+  raw: IikoProductGroup;
+}
+
 export class IikoNomenclatureService {
   constructor(private readonly client: IikoHttpClient) {}
 
@@ -36,44 +57,47 @@ export class IikoNomenclatureService {
     let revision: string | undefined;
     let total: number | undefined;
 
+    // Группы лежат в отдельном эндпоинте: /nomenclature/v1/product/list их не возвращает
+    const groups = await this.fetchGroups(effectiveLimit);
+    const groupIds = new Set<string>();
+    for (const group of groups) {
+      if (group.isDeleted) continue;
+      groupIds.add(group.id);
+      await prisma.productGroup.upsert({
+        where: { groupId: group.id },
+        update: {
+          organizationId: organization.id,
+          name: group.name,
+          parentGroupId: group.parentGroupId ?? undefined,
+          rawData: group.raw as Prisma.InputJsonObject
+        },
+        create: {
+          groupId: group.id,
+          organizationId: organization.id,
+          name: group.name,
+          parentGroupId: group.parentGroupId ?? undefined,
+          rawData: group.raw as Prisma.InputJsonObject
+        }
+      });
+    }
+    console.log(`[syncMenu] Synced ${groupIds.size} product groups`);
+
     while (true) {
       console.log(`[syncMenu] Fetching page: offset=${offset}, limit=${effectiveLimit}`);
+      // withCount/withTotalCount больше не принимаются iiko (400) — страницаем до неполной страницы
       const data = await this.client.post<NomenclatureResponse>(
         "/nomenclature/v1/product/list",
-        { limit: effectiveLimit, offset, withCount: true, withTotalCount: true, filters: [] },
+        { limit: effectiveLimit, offset, filters: [] },
         "iiko.nomenclature.products"
       );
       console.log(`[syncMenu] Response received: revision=${data.revision}, totalCount=${data.totalCount}, count=${data.count}, products.length=${(data.products ?? data.items ?? []).length}`);
       revision = data.revision === undefined ? revision : String(data.revision);
       const products = data.products ?? data.items ?? [];
-      const groups = data.productGroups ?? data.groups ?? [];
 
       // Capture total from first response (iiko may not return totalCount on subsequent pages)
       if (total === undefined) {
         total = data.totalCount ?? data.count;
         console.log(`[syncMenu] Total products: ${total}, limit: ${effectiveLimit}, offset: ${offset}, received: ${products.length}`);
-      }
-
-      // Build a set of group IDs that were present in this response,
-      // so we can safely reference them when linking products.
-      const groupIds = new Set<string>(groups.map((g) => g.id));
-      for (const group of groups) {
-        await prisma.productGroup.upsert({
-          where: { groupId: group.id },
-          update: {
-            organizationId: organization.id,
-            name: group.name,
-            parentGroupId: group.parentGroupId ?? group.parentGroup ?? undefined,
-            rawData: group as Prisma.InputJsonObject
-          },
-          create: {
-            groupId: group.id,
-            organizationId: organization.id,
-            name: group.name,
-            parentGroupId: group.parentGroupId ?? group.parentGroup ?? undefined,
-            rawData: group as Prisma.InputJsonObject
-          }
-        });
       }
 
       for (const product of products) {
@@ -139,6 +163,38 @@ export class IikoNomenclatureService {
     }
 
     return { synced, revision };
+  }
+
+  /**
+   * Список групп номенклатуры из /nomenclature/v1/group/list.
+   * Эндпоинт не принимает organizationId — область определяется токеном,
+   * и не возвращает totalCount — страницаем до неполной страницы.
+   */
+  private async fetchGroups(limit: number): Promise<IikoGroupNormalized[]> {
+    const result: IikoGroupNormalized[] = [];
+    let offset = 0;
+    while (true) {
+      const data = await this.client.post<NomenclatureGroupsResponse>(
+        "/nomenclature/v1/group/list",
+        { limit, offset, filters: [] },
+        "iiko.nomenclature.groups"
+      );
+      const page = data.groups ?? [];
+      for (const group of page) {
+        const id = group.groupId ?? group.id;
+        if (!id || !group.name) continue;
+        result.push({
+          id,
+          name: group.name,
+          parentGroupId: group.parentId ?? group.parentGroupId ?? null,
+          isDeleted: group.isDeleted ?? false,
+          raw: group as IikoProductGroup
+        });
+      }
+      offset += page.length;
+      if (page.length < limit) break;
+    }
+    return result;
   }
 }
 

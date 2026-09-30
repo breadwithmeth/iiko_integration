@@ -10,6 +10,7 @@ import { SettingsIikoPage } from "../pages/SettingsIikoPage";
 import { UsersPage } from "../pages/UsersPage";
 import { StatisticsPage } from "../pages/StatisticsPage";
 import { UptKpiPage } from "../pages/UptKpiPage";
+import { BonusPage } from "../pages/BonusPage";
 
 export const router = createBrowserRouter([
   { path: "/login", element: <LoginPage /> },
@@ -27,6 +28,7 @@ export const router = createBrowserRouter([
       { path: "orders/:id", element: <OrderDetailsPage /> },
       { path: "statistics", element: <StatisticsPage /> },
       { path: "upt-kpi", element: <UptKpiPage /> },
+      { path: "bonus", element: <BonusPage /> },
       { path: "products", element: <ProductsPage /> },
       { path: "settings", element: <Navigate to="/settings/iiko" replace /> },
       { path: "settings/iiko", element: <SettingsIikoPage /> },
